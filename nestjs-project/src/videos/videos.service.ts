@@ -2,14 +2,21 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Channel } from '../channels/entities/channel.entity';
 import { ChannelsService } from '../channels/channels.service';
 import videoConfig from '../config/video.config';
 import { isPgUniqueViolationOnColumn } from '../common/database/pg-unique-violation.util';
 import { StorageService } from '../storage/storage.service';
+import type { CreatePartUrlsDto } from './dto/create-part-urls.dto';
 import type { CreateVideoUploadDto } from './dto/create-video-upload.dto';
 import { Video, VideoStatus } from './entities/video.entity';
 import { generatePublicId } from './public-id.util';
-import { VideoTooLargeException } from './video.exceptions';
+import {
+  InvalidPartNumbersException,
+  VideoNotFoundException,
+  VideoTooLargeException,
+  VideoUploadNotInProgressException,
+} from './video.exceptions';
 
 const PUBLIC_ID_COLUMN = 'public_id';
 const MAX_PUBLIC_ID_RETRIES = 5;
@@ -49,6 +56,26 @@ export interface InitiateUploadResult {
   part_count: number;
 }
 
+export interface PartUrl {
+  part_number: number;
+  url: string;
+}
+
+export interface CreatePartUrlsResult {
+  parts: PartUrl[];
+  expires_at: string;
+}
+
+export interface UploadedPartInfo {
+  part_number: number;
+  etag: string;
+  size_bytes: number;
+}
+
+export interface ListUploadedPartsResult {
+  parts: UploadedPartInfo[];
+}
+
 @Injectable()
 export class VideosService {
   constructor(
@@ -60,6 +87,87 @@ export class VideosService {
     private readonly config: ConfigType<typeof videoConfig>,
   ) {}
 
+  private async requireChannel(userId: string): Promise<Channel> {
+    const channel = await this.channelsService.findByUserId(userId);
+    if (!channel) {
+      throw new Error(`User ${userId} has no channel`);
+    }
+    return channel;
+  }
+
+  async findOwnedByPublicId(userId: string, publicId: string): Promise<Video> {
+    const channel = await this.requireChannel(userId);
+    const video = await this.videoRepository.findOne({
+      where: { public_id: publicId, channel_id: channel.id },
+    });
+    if (!video) {
+      throw new VideoNotFoundException();
+    }
+    return video;
+  }
+
+  private async requireUploadInProgress(
+    userId: string,
+    publicId: string,
+  ): Promise<Video> {
+    const video = await this.findOwnedByPublicId(userId, publicId);
+    if (video.status !== VideoStatus.UPLOADING) {
+      throw new VideoUploadNotInProgressException();
+    }
+    return video;
+  }
+
+  async createPartUrls(
+    userId: string,
+    publicId: string,
+    dto: CreatePartUrlsDto,
+  ): Promise<CreatePartUrlsResult> {
+    const video = await this.requireUploadInProgress(userId, publicId);
+
+    const { part_count } = computePartPlan(video.size_bytes);
+    if (dto.part_numbers.some((partNumber) => partNumber > part_count)) {
+      throw new InvalidPartNumbersException();
+    }
+
+    const ttlSeconds = this.config.uploadPartUrlTtlSeconds;
+    const parts = await Promise.all(
+      dto.part_numbers.map(async (partNumber) => ({
+        part_number: partNumber,
+        url: await this.storageService.presignUploadPart(
+          video.original_key,
+          video.upload_id!,
+          partNumber,
+          ttlSeconds,
+        ),
+      })),
+    );
+
+    return {
+      parts,
+      expires_at: new Date(Date.now() + ttlSeconds * 1000).toISOString(),
+    };
+  }
+
+  async listUploadedParts(
+    userId: string,
+    publicId: string,
+  ): Promise<ListUploadedPartsResult> {
+    const video = await this.requireUploadInProgress(userId, publicId);
+
+    const parts = await this.storageService.listParts(
+      video.original_key,
+      video.upload_id!,
+    );
+
+    return {
+      parts: parts.map((part) => ({
+        part_number: part.partNumber,
+        etag: part.etag,
+        size_bytes: part.size,
+      })),
+    };
+  }
+
   async initiateUpload(
     userId: string,
     dto: CreateVideoUploadDto,
@@ -68,10 +176,7 @@ export class VideosService {
       throw new VideoTooLargeException();
     }
 
-    const channel = await this.channelsService.findByUserId(userId);
-    if (!channel) {
-      throw new Error(`User ${userId} has no channel`);
-    }
+    const channel = await this.requireChannel(userId);
 
     const title = deriveTitle(dto.filename);
     const { part_size_bytes, part_count } = computePartPlan(dto.size_bytes);

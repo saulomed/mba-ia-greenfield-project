@@ -2,7 +2,12 @@ import { QueryFailedError } from 'typeorm';
 import { Channel } from '../channels/entities/channel.entity';
 import { deriveTitle, computePartPlan, VideosService } from './videos.service';
 import { Video, VideoStatus } from './entities/video.entity';
-import { VideoTooLargeException } from './video.exceptions';
+import {
+  InvalidPartNumbersException,
+  VideoNotFoundException,
+  VideoTooLargeException,
+  VideoUploadNotInProgressException,
+} from './video.exceptions';
 
 function makeUniqueError(): QueryFailedError {
   const driverError = {
@@ -28,8 +33,37 @@ function makeVideoRepository(overrides: Record<string, jest.Mock> = {}): any {
   return {
     create: jest.fn((data) => data),
     save: jest.fn(),
+    findOne: jest.fn(),
     ...overrides,
   };
+}
+
+function makeVideo(overrides: Partial<Video> = {}): Video {
+  const v = new Video();
+  v.id = 'video-id';
+  v.public_id = 'AAAAAAAAAAA';
+  v.channel_id = 'channel-id';
+  v.title = 'Minhas Férias';
+  v.description = null;
+  v.status = VideoStatus.UPLOADING;
+  v.failure_reason = null;
+  v.original_filename = 'Minhas Férias.mov';
+  v.mime_type = 'video/quicktime';
+  v.size_bytes = 6291456;
+  v.original_key = 'videos/AAAAAAAAAAA/original';
+  v.upload_id = 'upload-id-1';
+  v.playback_key = null;
+  v.thumbnail_key = null;
+  v.duration_seconds = null;
+  v.width = null;
+  v.height = null;
+  v.video_codec = null;
+  v.audio_codec = null;
+  v.upload_completed_at = null;
+  v.processed_at = null;
+  v.created_at = new Date();
+  v.updated_at = new Date();
+  return Object.assign(v, overrides);
 }
 
 describe('deriveTitle', () => {
@@ -151,5 +185,179 @@ describe('VideosService.initiateUpload', () => {
     expect(storageService.createMultipartUpload).toHaveBeenCalledTimes(2);
     expect(storageService.abortMultipartUpload).toHaveBeenCalledTimes(1);
     expect(result.public_id).toBeDefined();
+  });
+});
+
+describe('VideosService.findOwnedByPublicId', () => {
+  it('throws VideoNotFoundException when no video matches public_id + channel_id', async () => {
+    const channel = makeChannel();
+    const channelsService = {
+      findByUserId: jest.fn().mockResolvedValue(channel),
+    } as any;
+    const videoRepository = makeVideoRepository({
+      findOne: jest.fn().mockResolvedValue(null),
+    });
+    const service = new VideosService(
+      videoRepository,
+      channelsService,
+      {} as any,
+      {} as any,
+    );
+
+    await expect(
+      service.findOwnedByPublicId('user-id', 'someone-elses'),
+    ).rejects.toThrow(VideoNotFoundException);
+    expect(videoRepository.findOne).toHaveBeenCalledWith({
+      where: { public_id: 'someone-elses', channel_id: channel.id },
+    });
+  });
+});
+
+describe('VideosService.createPartUrls', () => {
+  it('throws VideoUploadNotInProgressException when status is not uploading', async () => {
+    const channel = makeChannel();
+    const video = makeVideo({ status: VideoStatus.PROCESSING });
+    const channelsService = {
+      findByUserId: jest.fn().mockResolvedValue(channel),
+    } as any;
+    const videoRepository = makeVideoRepository({
+      findOne: jest.fn().mockResolvedValue(video),
+    });
+    const service = new VideosService(
+      videoRepository,
+      channelsService,
+      {} as any,
+      { uploadPartUrlTtlSeconds: 3600 } as any,
+    );
+
+    await expect(
+      service.createPartUrls('user-id', video.public_id, {
+        part_numbers: [1],
+      }),
+    ).rejects.toThrow(VideoUploadNotInProgressException);
+  });
+
+  it('rejects a part_number above part_count', async () => {
+    const channel = makeChannel();
+    const video = makeVideo({ size_bytes: 6291456 }); // part_count = 2
+    const channelsService = {
+      findByUserId: jest.fn().mockResolvedValue(channel),
+    } as any;
+    const videoRepository = makeVideoRepository({
+      findOne: jest.fn().mockResolvedValue(video),
+    });
+    const service = new VideosService(
+      videoRepository,
+      channelsService,
+      {} as any,
+      { uploadPartUrlTtlSeconds: 3600 } as any,
+    );
+
+    await expect(
+      service.createPartUrls('user-id', video.public_id, {
+        part_numbers: [3],
+      }),
+    ).rejects.toThrow(InvalidPartNumbersException);
+  });
+
+  it('presigns each requested part and sets expires_at respecting the TTL', async () => {
+    const channel = makeChannel();
+    const video = makeVideo({ size_bytes: 6291456 }); // part_count = 2
+    const channelsService = {
+      findByUserId: jest.fn().mockResolvedValue(channel),
+    } as any;
+    const videoRepository = makeVideoRepository({
+      findOne: jest.fn().mockResolvedValue(video),
+    });
+    const storageService = {
+      presignUploadPart: jest
+        .fn()
+        .mockImplementation(
+          async (_key: string, _uploadId: string, partNumber: number) =>
+            `https://storage.example/part-${partNumber}`,
+        ),
+    } as any;
+    const ttlSeconds = 3600;
+    const service = new VideosService(
+      videoRepository,
+      channelsService,
+      storageService,
+      { uploadPartUrlTtlSeconds: ttlSeconds } as any,
+    );
+
+    const before = Date.now();
+    const result = await service.createPartUrls('user-id', video.public_id, {
+      part_numbers: [1, 2],
+    });
+    const after = Date.now();
+
+    expect(result.parts).toEqual([
+      { part_number: 1, url: 'https://storage.example/part-1' },
+      { part_number: 2, url: 'https://storage.example/part-2' },
+    ]);
+    expect(storageService.presignUploadPart).toHaveBeenCalledWith(
+      video.original_key,
+      video.upload_id,
+      1,
+      ttlSeconds,
+    );
+    const expiresAtMs = new Date(result.expires_at).getTime();
+    expect(expiresAtMs).toBeGreaterThanOrEqual(before + ttlSeconds * 1000);
+    expect(expiresAtMs).toBeLessThanOrEqual(after + ttlSeconds * 1000);
+  });
+});
+
+describe('VideosService.listUploadedParts', () => {
+  it('throws VideoUploadNotInProgressException when status is not uploading', async () => {
+    const channel = makeChannel();
+    const video = makeVideo({ status: VideoStatus.READY });
+    const channelsService = {
+      findByUserId: jest.fn().mockResolvedValue(channel),
+    } as any;
+    const videoRepository = makeVideoRepository({
+      findOne: jest.fn().mockResolvedValue(video),
+    });
+    const service = new VideosService(
+      videoRepository,
+      channelsService,
+      {} as any,
+      {} as any,
+    );
+
+    await expect(
+      service.listUploadedParts('user-id', video.public_id),
+    ).rejects.toThrow(VideoUploadNotInProgressException);
+  });
+
+  it('maps storage parts to the response shape', async () => {
+    const channel = makeChannel();
+    const video = makeVideo();
+    const channelsService = {
+      findByUserId: jest.fn().mockResolvedValue(channel),
+    } as any;
+    const videoRepository = makeVideoRepository({
+      findOne: jest.fn().mockResolvedValue(video),
+    });
+    const storageService = {
+      listParts: jest
+        .fn()
+        .mockResolvedValue([{ partNumber: 1, etag: '"abc"', size: 5242880 }]),
+    } as any;
+    const service = new VideosService(
+      videoRepository,
+      channelsService,
+      storageService,
+      {} as any,
+    );
+
+    const result = await service.listUploadedParts('user-id', video.public_id);
+
+    expect(result).toEqual({
+      parts: [{ part_number: 1, etag: '"abc"', size_bytes: 5242880 }],
+    });
+    expect(storageService.listParts).toHaveBeenCalledWith(
+      video.original_key,
+      video.upload_id,
+    );
   });
 });

@@ -47,3 +47,9 @@ export class VideoNotReadyException extends DomainException {
     super('VIDEO_NOT_READY', 409, 'Video is not ready');
   }
 }
+
+export class InvalidPartNumbersException extends DomainException {
+  constructor() {
+    super('VALIDATION_ERROR', 400, 'part_numbers must not exceed part_count');
+  }
+}

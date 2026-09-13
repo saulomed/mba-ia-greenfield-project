@@ -1,7 +1,7 @@
 # phase-03-upload-processing — Progress
 
 **Status:** in_progress
-**SIs:** 7/14 completed
+**SIs:** 8/14 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços de Storage, Fila e Worker
 - **Status:** completed
@@ -81,9 +81,13 @@
   - **Fora de escopo (dívida pré-existente, não corrigida):** `npm run lint` na base completa reporta 254 problemas (202 erros, 52 warnings, majoritariamente `@typescript-eslint/no-unsafe-*` e `require-await`), todos em arquivos não tocados por esta SI e já presentes desde o commit `fba109f` (SI-03.4) — confirmado arquivo a arquivo antes de decidir não corrigir.
 
 ### SI-03.8 — Endpoints de URLs de Partes e Listagem para Retomada
-- **Status:** pending
-- **Tests:** —
-- **Observations:** none
+- **Status:** completed
+- **Tests:** unit 6 casos novos (`src/videos/videos.service.spec.ts`: `findOwnedByPublicId` 404 para vídeo de outro canal, `createPartUrls` 409 fora de `uploading`/rejeição de `part_number > part_count`/`expires_at` respeitando o TTL, `listUploadedParts` 409 fora de `uploading`/mapeamento de partes do storage); integration (`src/videos/videos.service.integration-spec.ts`: PUT real de 5 MiB na URL pré-assinada aceito pelo MinIO, parte aparece em `listUploadedParts` com `size_bytes: 5242880`); e2e (`test/videos-upload-parts.e2e-spec.ts`: 10 cenários do spec `nestjs-project/specs/videos-upload-parts.plan.md` — emissão de URLs, PUT real, listagem vazia/preenchida, 404 não-dono, 404 `public_id` desconhecido, 409 vídeo em `processing`, 401 sem token); suíte completa 37 suites/222 testes, e2e 5 suites/67 testes (rodado com `--runInBand`), `tsc --noEmit` limpo, `lint` limpo nos arquivos de produção tocados
+- **Observations:**
+  - `findOwnedByPublicId(userId, publicId)` filtra por `public_id` **e** `channel_id` do canal do usuário na mesma query — vídeo inexistente e vídeo de outro canal produzem exatamente o mesmo caminho de código e a mesma `VideoNotFoundException`, sem revelar a existência do recurso (AMB-1/AMB-2).
+  - `part_count` não é persistido na entidade `Video`; `createPartUrls` recalcula via `computePartPlan(video.size_bytes)` a cada chamada — mesmo padrão já usado por `initiateUpload`, evita estado derivado que poderia dessincronizar de `size_bytes`.
+  - `presignUploadPart` é assinatura SigV4 local (sem chamada de rede ao S3/MinIO); o `Promise.all` sobre os `part_numbers` paraleliza apenas trabalho de CPU já muito barato — mantido como está por clareza, sem necessidade de otimização.
+  - Revisão `/simplify` (reuso, simplificação, eficiência, altitude) aplicada: (1) extraído `requireUploadInProgress(userId, publicId)` — combina `findOwnedByPublicId` + checagem de `status === 'uploading'`, antes duplicada inline em `createPartUrls` e `listUploadedParts` (achado do ângulo Altitude, antecipando que SI-03.9 adicionaria uma terceira cópia do mesmo padrão); (2) extraído `test/support/app-test-helpers.ts` (`bootstrapE2eApp()`) encapsulando o boilerplate de `Test.createTestingModule`+`ValidationPipe`+filtros+`app.init()`, usado pelo novo `videos-upload-parts.e2e-spec.ts` — `videos-upload-initiate.e2e-spec.ts` (SI-03.7) deliberadamente não foi tocado/migrado, mantendo seu próprio boilerplate manual; a duplicação residual entre os e2e specs fica registrada como candidata a limpeza futura, junto com a mesma duplicação já anotada na SI-03.7 para `auth-test-helpers.ts`. Achados descartados conscientemente: (a) `InvalidPartNumbersException` reaproveitar o `errorCode: 'VALIDATION_ERROR'` (já emitido por `ValidationExceptionFilter` para falhas de DTO) foi apontado de forma independente por 3 dos 4 agentes como uma colisão de conceito, sugerindo um código de domínio próprio (ex. `INVALID_PART_NUMBER`) — **mantido como está porque o Test Spec autoritativo desta SI (`nestjs-project/specs/videos-upload-parts.plan.md`, cenário 1.4 `rejects-part-number-above-part-count-with-400`) fixa explicitamente `error: "VALIDATION_ERROR"` como resultado esperado**; trocar o código quebraria esse contrato de teste, que é a fonte da verdade para este plano (`test_specs_aware: true`); (b) colapsar as duas queries ao Postgres de `findOwnedByPublicId` (`requireChannel` + busca do vídeo) numa única query com `JOIN` — rejeitado como otimização prematura: ambas são buscas indexadas muito baratas (`channel_id` indexado em `videos`, `user_id` único em `channels`) num endpoint que não é hot-path de alto QPS, e o `JOIN` via `QueryBuilder` reduziria a legibilidade sem ganho mensurável; (c) unificar `createDraft()` (novo helper local do e2e spec desta SI) com as chamadas inline equivalentes já existentes em `videos-upload-initiate.e2e-spec.ts` — tocaria um arquivo de teste de SI já commitada; (d) extrair um decorator composto para os blocos `@ApiResponse` de 401/404/409 repetidos nos três endpoints de `VideosController` — mantém consistência com a mesma decisão já tomada na SI-03.7 (o padrão não-abstraído já é a convenção estabelecida em `auth.controller.ts`).
 
 ### SI-03.9 — Endpoint de Conclusão do Upload e Enfileiramento
 - **Status:** pending

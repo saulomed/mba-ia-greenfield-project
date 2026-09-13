@@ -4,6 +4,7 @@ import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/entities/channel.entity';
 import { StorageService } from '../storage/storage.service';
 import { cleanAllTables } from '../test/create-test-data-source';
+import { buildSyntheticPart } from '../test/synthetic-bytes';
 import { User } from '../users/entities/user.entity';
 import { videosTestingModuleImports } from './test/videos-testing-module';
 import { Video, VideoStatus } from './entities/video.entity';
@@ -82,5 +83,40 @@ describe('VideosService (integration)', () => {
       persisted!.upload_id!,
     );
     expect(parts).toEqual([]);
+  });
+
+  it('issues a presigned URL that MinIO accepts, then lists the part back', async () => {
+    const { user } = await createUserWithChannel();
+    const { public_id } = await videosService.initiateUpload(user.id, {
+      filename: 'video.mp4',
+      content_type: 'video/mp4',
+      size_bytes: 6291456,
+    });
+
+    const { parts, expires_at } = await videosService.createPartUrls(
+      user.id,
+      public_id,
+      { part_numbers: [1] },
+    );
+
+    expect(parts).toEqual([{ part_number: 1, url: expect.any(String) }]);
+    expect(new Date(expires_at).getTime()).toBeGreaterThan(Date.now());
+
+    const partBytes = buildSyntheticPart(1, 5 * 1024 * 1024);
+    const putResponse = await fetch(parts[0].url, {
+      method: 'PUT',
+      body: new Uint8Array(partBytes),
+    });
+    expect(putResponse.status).toBe(200);
+    const etag = putResponse.headers.get('etag');
+    expect(etag).toBeTruthy();
+
+    const { parts: uploaded } = await videosService.listUploadedParts(
+      user.id,
+      public_id,
+    );
+    expect(uploaded).toEqual([
+      { part_number: 1, etag, size_bytes: 5 * 1024 * 1024 },
+    ]);
   });
 });

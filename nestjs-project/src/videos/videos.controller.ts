@@ -1,8 +1,17 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiTags,
   getSchemaPath,
@@ -10,8 +19,13 @@ import {
 import type { JwtPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ApiErrorEnvelope } from '../common/openapi/api-error-envelope.dto';
+import { CreatePartUrlsDto } from './dto/create-part-urls.dto';
 import { CreateVideoUploadDto } from './dto/create-video-upload.dto';
-import type { InitiateUploadResult } from './videos.service';
+import type {
+  CreatePartUrlsResult,
+  InitiateUploadResult,
+  ListUploadedPartsResult,
+} from './videos.service';
 import { VideosService } from './videos.service';
 
 @ApiTags('videos')
@@ -61,5 +75,109 @@ export class VideosController {
     @Body() dto: CreateVideoUploadDto,
   ): Promise<InitiateUploadResult> {
     return this.videosService.initiateUpload(user.sub, dto);
+  }
+
+  @Post(':publicId/upload/part-urls')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Issue presigned URLs for a batch of upload parts',
+    description:
+      'Returns presigned UploadPart URLs for the requested part numbers, so the client can upload bytes directly to storage and resume after a connection failure.',
+  })
+  @ApiParam({ name: 'publicId', description: 'Video public_id' })
+  @ApiBody({ type: CreatePartUrlsDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Presigned part URLs issued',
+    schema: {
+      properties: {
+        parts: {
+          type: 'array',
+          items: {
+            properties: {
+              part_number: { type: 'integer' },
+              url: { type: 'string' },
+            },
+          },
+        },
+        expires_at: { type: 'string', format: 'date-time' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Missing or invalid access token',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Video not found',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Video upload is not in progress',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  async createPartUrls(
+    @CurrentUser() user: JwtPayload,
+    @Param('publicId') publicId: string,
+    @Body() dto: CreatePartUrlsDto,
+  ): Promise<CreatePartUrlsResult> {
+    return this.videosService.createPartUrls(user.sub, publicId, dto);
+  }
+
+  @Get(':publicId/upload/parts')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'List uploaded parts',
+    description:
+      'Lists the parts already received by storage, so the client can resume an interrupted upload.',
+  })
+  @ApiParam({ name: 'publicId', description: 'Video public_id' })
+  @ApiResponse({
+    status: 200,
+    description: 'Uploaded parts',
+    schema: {
+      properties: {
+        parts: {
+          type: 'array',
+          items: {
+            properties: {
+              part_number: { type: 'integer' },
+              etag: { type: 'string' },
+              size_bytes: { type: 'integer' },
+            },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Missing or invalid access token',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Video not found',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Video upload is not in progress',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  async listUploadedParts(
+    @CurrentUser() user: JwtPayload,
+    @Param('publicId') publicId: string,
+  ): Promise<ListUploadedPartsResult> {
+    return this.videosService.listUploadedParts(user.sub, publicId);
   }
 }
