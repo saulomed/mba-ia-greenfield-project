@@ -9,6 +9,7 @@ import { isPgUniqueViolationOnColumn } from '../common/database/pg-unique-violat
 import { StorageService } from '../storage/storage.service';
 import type { CreatePartUrlsDto } from './dto/create-part-urls.dto';
 import type { CreateVideoUploadDto } from './dto/create-video-upload.dto';
+import type { VideoResponseDto } from './dto/video-response.dto';
 import { Video, VideoStatus } from './entities/video.entity';
 import { generatePublicId } from './public-id.util';
 import {
@@ -145,6 +146,33 @@ export class VideosService {
     return {
       parts,
       expires_at: new Date(Date.now() + ttlSeconds * 1000).toISOString(),
+    };
+  }
+
+  async getOwnedVideo(
+    userId: string,
+    publicId: string,
+  ): Promise<VideoResponseDto> {
+    const video = await this.findOwnedByPublicId(userId, publicId);
+
+    return {
+      public_id: video.public_id,
+      title: video.title,
+      status: video.status,
+      failure_reason: video.failure_reason,
+      original_filename: video.original_filename,
+      mime_type: video.mime_type,
+      size_bytes: video.size_bytes,
+      duration_seconds: video.duration_seconds,
+      width: video.width,
+      height: video.height,
+      video_codec: video.video_codec,
+      audio_codec: video.audio_codec,
+      thumbnail_url: video.thumbnail_key
+        ? this.storageService.getPublicUrl(video.thumbnail_key)
+        : null,
+      created_at: video.created_at,
+      processed_at: video.processed_at,
     };
   }
 

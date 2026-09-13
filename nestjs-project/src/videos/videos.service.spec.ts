@@ -361,3 +361,73 @@ describe('VideosService.listUploadedParts', () => {
     );
   });
 });
+
+describe('VideosService.getOwnedVideo', () => {
+  it('returns thumbnail_url null when there is no thumbnail_key', async () => {
+    const channel = makeChannel();
+    const video = makeVideo({ thumbnail_key: null });
+    const channelsService = {
+      findByUserId: jest.fn().mockResolvedValue(channel),
+    } as any;
+    const videoRepository = makeVideoRepository({
+      findOne: jest.fn().mockResolvedValue(video),
+    });
+    const storageService = { getPublicUrl: jest.fn() } as any;
+    const service = new VideosService(
+      videoRepository,
+      channelsService,
+      storageService,
+      {} as any,
+    );
+
+    const result = await service.getOwnedVideo('user-id', video.public_id);
+
+    expect(result.thumbnail_url).toBeNull();
+    expect(storageService.getPublicUrl).not.toHaveBeenCalled();
+  });
+
+  it('builds thumbnail_url from the public endpoint and bucket when thumbnail_key is present', async () => {
+    const channel = makeChannel();
+    const video = makeVideo({
+      status: VideoStatus.READY,
+      thumbnail_key: 'thumbnails/abc123.jpg',
+      duration_seconds: 12.5,
+      width: 1920,
+      height: 1080,
+      video_codec: 'h264',
+      audio_codec: 'aac',
+    });
+    const channelsService = {
+      findByUserId: jest.fn().mockResolvedValue(channel),
+    } as any;
+    const videoRepository = makeVideoRepository({
+      findOne: jest.fn().mockResolvedValue(video),
+    });
+    const storageService = {
+      getPublicUrl: jest
+        .fn()
+        .mockReturnValue(
+          'http://storage.example/test-bucket/thumbnails/abc123.jpg',
+        ),
+    } as any;
+    const service = new VideosService(
+      videoRepository,
+      channelsService,
+      storageService,
+      {} as any,
+    );
+
+    const result = await service.getOwnedVideo('user-id', video.public_id);
+
+    expect(result.thumbnail_url).toBe(
+      'http://storage.example/test-bucket/thumbnails/abc123.jpg',
+    );
+    expect(storageService.getPublicUrl).toHaveBeenCalledWith(
+      'thumbnails/abc123.jpg',
+    );
+    expect(result.size_bytes).toBe(video.size_bytes);
+    expect(typeof result.size_bytes).toBe('number');
+    expect(result.duration_seconds).toBe(12.5);
+    expect(typeof result.duration_seconds).toBe('number');
+  });
+});

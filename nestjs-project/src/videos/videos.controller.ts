@@ -21,6 +21,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ApiErrorEnvelope } from '../common/openapi/api-error-envelope.dto';
 import { CreatePartUrlsDto } from './dto/create-part-urls.dto';
 import { CreateVideoUploadDto } from './dto/create-video-upload.dto';
+import { VideoResponseDto } from './dto/video-response.dto';
 import type {
   CreatePartUrlsResult,
   InitiateUploadResult,
@@ -179,5 +180,35 @@ export class VideosController {
     @Param('publicId') publicId: string,
   ): Promise<ListUploadedPartsResult> {
     return this.videosService.listUploadedParts(user.sub, publicId);
+  }
+
+  @Get(':publicId')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Get video detail for the owner',
+    description:
+      'Returns the video status, extracted metadata and a stable public thumbnail URL, so the owner can follow processing progress.',
+  })
+  @ApiParam({ name: 'publicId', description: 'Video public_id' })
+  @ApiResponse({
+    status: 200,
+    description: 'Video detail',
+    type: VideoResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Missing or invalid access token',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Video not found',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  async getVideo(
+    @CurrentUser() user: JwtPayload,
+    @Param('publicId') publicId: string,
+  ): Promise<VideoResponseDto> {
+    return this.videosService.getOwnedVideo(user.sub, publicId);
   }
 }

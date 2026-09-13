@@ -263,4 +263,8 @@ export class StorageService {
       { expiresIn },
     );
   }
+
+  getPublicUrl(key: string): string {
+    return `${this.config.publicEndpoint}/${this.config.bucket}/${key}`;
+  }
 }
