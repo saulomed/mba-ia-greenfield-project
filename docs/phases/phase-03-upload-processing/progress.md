@@ -1,7 +1,7 @@
 # phase-03-upload-processing — Progress
 
 **Status:** in_progress
-**SIs:** 3/14 completed
+**SIs:** 4/14 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços de Storage, Fila e Worker
 - **Status:** completed
@@ -35,9 +35,16 @@
   - Revisão `/simplify` aplicada: extraída `createS3Client(config, endpoint)` em `create-s3-client.ts`, reaproveitada nos dois providers de `storage.module.ts` e no teste de bootstrap (antes 3 construções manuais idênticas de `S3Client`); extraído `rethrowTranslated` em `storage.service.ts` para eliminar 3 blocos `try/catch` repetidos; nomeada a lista inline `['NoSuchUpload']`; `onApplicationBootstrap` agora aplica a lifecycle policy e a política de thumbnails em paralelo (`Promise.all`, ambas só dependem do bucket já existir, não uma da outra); `ensureBucketExists` trocou um `catch` genérico (tratava qualquer erro do `HeadBucketCommand` como "bucket não existe", violando a regra do projeto de nunca engolir erros) por uma checagem específica de `error.name === 'NotFound'` — validado empiricamente contra o MinIO real. Achado descartado conscientemente: `StorageException` não estender `DomainException` (ver acima, é a fronteira de tradução intencional do módulo).
 
 ### SI-03.4 — Entidade Video, Migration e Gerador de public_id
-- **Status:** pending
-- **Tests:** —
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 8 passing (`src/videos/entities/video.entity.integration-spec.ts`: 4; `src/videos/public-id.util.spec.ts`: 4); suíte completa 30 suites/182 testes, e2e 3 suites/52 testes, `tsc --noEmit` e `lint` limpos nos arquivos tocados
+- **Observations:**
+  - `Video` criada com PK `uuid`, `public_id varchar(16)` unique, FK `channel_id → channels.id` (`ON DELETE NO ACTION`, mesma convenção de todas as FKs pré-existentes no projeto), enum `status` (`uploading`/`processing`/`ready`/`failed`, default `uploading`), e colunas `bigint`/`numeric(10,3)` com transformer para `number` — testado especificamente com `size_bytes = 10737418240` (10 GiB, acima de 2^31) indo e voltando como `number`.
+  - Migration `CreateVideos1789324957302` gerada via `npm run migration:generate` (glob de `data-source.ts` detectou a entidade automaticamente); revisada sem edição manual do SQL. `src/database/migrations.integration-spec.ts` passou a rodar 3 migrations e a incluir `videos` em `MANAGED_TABLES`.
+  - Bug pré-existente exposto e corrigido: o `beforeAll` de `migrations.integration-spec.ts` derrubava tabelas/tipos em paralelo via `Promise.all`; com o novo enum `videos_status_enum`, os `DROP` concorrentes disputavam locks de catálogo em ordens diferentes e o Postgres retornava `deadlock detected`. Trocado por um loop sequencial (`for...await`); o mesmo risco já existia antes com `verification_tokens_type_enum`, só não havia se manifestado.
+  - `Channel` ganhou o lado inverso `@OneToMany(() => Video, (video) => video.channel)`. Como o TypeORM exige a metadata da entidade relacionada presente em qualquer `DataSource` de teste que inclua `Channel` (regra já documentada em `typeorm-migrations.md`, "Test DataSource Entity Arrays"), isso obrigou a adicionar `Video` ao array `ALL_ENTITIES` em 9 arquivos de teste pré-existentes (`channels/*`, `users/*`, `auth/*`) que não usam `Video` diretamente — efeito cascata mecânico, não um bug.
+  - `cleanAllTables` (`src/test/create-test-data-source.ts`) ganhou `DELETE FROM "videos"` na ordem correta (antes de `channels`, depois de `refresh_tokens`/`verification_tokens`), seguindo o mesmo padrão hardcoded já usado para as outras 4 tabelas.
+  - `generatePublicId` foi implementado com `crypto.randomBytes` e rejection sampling manual sobre o alfabeto base62, como pedia o plano; a revisão `/simplify` trocou a implementação por `crypto.randomInt(62)` (que já faz rejection sampling internamente no Node), preservando a garantia de "sem viés de módulo" com muito menos código — desvio consciente da redação literal do plano ("com `crypto.randomBytes`"), mantendo a mesma propriedade testada (comprimento, alfabeto `[0-9A-Za-z]`, 10.000 gerações sem colisão, distribuição sem viés grosseiro).
+  - Revisão `/simplify` (reuso, simplificação, eficiência, altitude) aplicada: unificado o transformer numérico duplicado em `video.entity.ts` (`size_bytes` passou a reaproveitar `numericColumnTransformer`, antes tinha uma cópia inline quase idêntica); `generatePublicId` simplificado com `crypto.randomInt` (achado repetido nos ângulos de simplificação e eficiência — eliminava tanto a duplicação de lógica de baixo nível quanto o custo de múltiplas chamadas pequenas a `randomBytes` em retentativas de rejeição). Achados descartados conscientemente: extrair um helper compartilhado de "string aleatória a partir de alfabeto" reunindo `nickname.util.ts` (hex) e `public-id.util.ts` (base62) — generalização cross-módulo fora do escopo deste SI, e a duplicação encolheu bastante depois da troca para `randomInt`; centralizar `ALL_ENTITIES`/`cleanAllTables` numa fonte única em vez de arrays hardcoded por arquivo — dívida estrutural pré-existente do TypeORM que este SI só perpetua (e o próprio plano mandou tocar os 9 arquivos dessa forma), fica registrada aqui como candidata a uma futura SI de infraestrutura de testes antes que mais entidades/relações cheguem nas próximas fases; FK `channel_id` sem `ON DELETE` explícito — consistente com 100% das FKs pré-existentes do projeto, sem requisito de produto ainda que force a decisão (viraria uma TD dedicada se/quando existir exclusão de canal).
 
 ### SI-03.5 — Infra: Fila BullMQ e Entrypoint do Video Worker
 - **Status:** pending
