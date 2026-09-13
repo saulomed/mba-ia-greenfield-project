@@ -19,10 +19,12 @@ import {
 import type { JwtPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ApiErrorEnvelope } from '../common/openapi/api-error-envelope.dto';
+import { CompleteVideoUploadDto } from './dto/complete-video-upload.dto';
 import { CreatePartUrlsDto } from './dto/create-part-urls.dto';
 import { CreateVideoUploadDto } from './dto/create-video-upload.dto';
 import { VideoResponseDto } from './dto/video-response.dto';
 import type {
+  CompleteUploadResult,
   CreatePartUrlsResult,
   InitiateUploadResult,
   ListUploadedPartsResult,
@@ -180,6 +182,64 @@ export class VideosController {
     @Param('publicId') publicId: string,
   ): Promise<ListUploadedPartsResult> {
     return this.videosService.listUploadedParts(user.sub, publicId);
+  }
+
+  @Post(':publicId/upload/complete')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Complete a resumable video upload',
+    description:
+      'Completes the multipart upload in storage, validates the real object size against the declared size and the configured limit, and enqueues video processing.',
+  })
+  @ApiParam({ name: 'publicId', description: 'Video public_id' })
+  @ApiBody({ type: CompleteVideoUploadDto })
+  @ApiResponse({
+    status: 202,
+    description: 'Upload completed and processing enqueued',
+    schema: {
+      properties: {
+        public_id: { type: 'string' },
+        status: { type: 'string', example: 'processing' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed or storage rejected the uploaded parts',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Missing or invalid access token',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Video not found',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Video upload is not in progress',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 413,
+    description: 'Video exceeds the maximum upload size',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 422,
+    description: 'Uploaded size does not match the declared size',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  async completeUpload(
+    @CurrentUser() user: JwtPayload,
+    @Param('publicId') publicId: string,
+    @Body() dto: CompleteVideoUploadDto,
+  ): Promise<CompleteUploadResult> {
+    return this.videosService.completeUpload(user.sub, publicId, dto);
   }
 
   @Get(':publicId')

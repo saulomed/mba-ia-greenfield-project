@@ -1,9 +1,12 @@
 import { QueryFailedError } from 'typeorm';
 import { Channel } from '../channels/entities/channel.entity';
+import { StorageInvalidPartsException } from '../storage/storage.exceptions';
 import { deriveTitle, computePartPlan, VideosService } from './videos.service';
 import { Video, VideoStatus } from './entities/video.entity';
 import {
   InvalidPartNumbersException,
+  InvalidUploadPartsException,
+  UploadSizeMismatchException,
   VideoNotFoundException,
   VideoTooLargeException,
   VideoUploadNotInProgressException,
@@ -116,6 +119,7 @@ describe('VideosService.initiateUpload', () => {
       channelsService,
       storageService,
       { maxUploadBytes: 5000000 } as any,
+      {} as any,
     );
 
     await expect(
@@ -141,6 +145,7 @@ describe('VideosService.initiateUpload', () => {
       channelsService,
       storageService,
       { maxUploadBytes: 10737418240 } as any,
+      {} as any,
     );
 
     const result = await service.initiateUpload('user-id', dto);
@@ -177,6 +182,7 @@ describe('VideosService.initiateUpload', () => {
       channelsService,
       storageService,
       { maxUploadBytes: 10737418240 } as any,
+      {} as any,
     );
 
     const result = await service.initiateUpload('user-id', dto);
@@ -200,6 +206,7 @@ describe('VideosService.findOwnedByPublicId', () => {
     const service = new VideosService(
       videoRepository,
       channelsService,
+      {} as any,
       {} as any,
       {} as any,
     );
@@ -228,6 +235,7 @@ describe('VideosService.createPartUrls', () => {
       channelsService,
       {} as any,
       { uploadPartUrlTtlSeconds: 3600 } as any,
+      {} as any,
     );
 
     await expect(
@@ -251,6 +259,7 @@ describe('VideosService.createPartUrls', () => {
       channelsService,
       {} as any,
       { uploadPartUrlTtlSeconds: 3600 } as any,
+      {} as any,
     );
 
     await expect(
@@ -283,6 +292,7 @@ describe('VideosService.createPartUrls', () => {
       channelsService,
       storageService,
       { uploadPartUrlTtlSeconds: ttlSeconds } as any,
+      {} as any,
     );
 
     const before = Date.now();
@@ -322,6 +332,7 @@ describe('VideosService.listUploadedParts', () => {
       channelsService,
       {} as any,
       {} as any,
+      {} as any,
     );
 
     await expect(
@@ -347,6 +358,7 @@ describe('VideosService.listUploadedParts', () => {
       videoRepository,
       channelsService,
       storageService,
+      {} as any,
       {} as any,
     );
 
@@ -377,6 +389,7 @@ describe('VideosService.getOwnedVideo', () => {
       videoRepository,
       channelsService,
       storageService,
+      {} as any,
       {} as any,
     );
 
@@ -415,6 +428,7 @@ describe('VideosService.getOwnedVideo', () => {
       channelsService,
       storageService,
       {} as any,
+      {} as any,
     );
 
     const result = await service.getOwnedVideo('user-id', video.public_id);
@@ -429,5 +443,203 @@ describe('VideosService.getOwnedVideo', () => {
     expect(typeof result.size_bytes).toBe('number');
     expect(result.duration_seconds).toBe(12.5);
     expect(typeof result.duration_seconds).toBe('number');
+  });
+});
+
+describe('VideosService.completeUpload', () => {
+  const dto = {
+    parts: [
+      { part_number: 2, etag: '"etag-2"' },
+      { part_number: 1, etag: '"etag-1"' },
+    ],
+  };
+
+  it('throws VideoUploadNotInProgressException without touching storage when status is not uploading', async () => {
+    const channel = makeChannel();
+    const video = makeVideo({ status: VideoStatus.PROCESSING });
+    const channelsService = {
+      findByUserId: jest.fn().mockResolvedValue(channel),
+    } as any;
+    const videoRepository = makeVideoRepository({
+      findOne: jest.fn().mockResolvedValue(video),
+    });
+    const storageService = {
+      completeMultipartUpload: jest.fn(),
+      headObject: jest.fn(),
+      deleteObject: jest.fn(),
+    } as any;
+    const videoProcessingProducer = { enqueueProcessing: jest.fn() } as any;
+    const service = new VideosService(
+      videoRepository,
+      channelsService,
+      storageService,
+      { maxUploadBytes: 12582912 } as any,
+      videoProcessingProducer,
+    );
+
+    await expect(
+      service.completeUpload('user-id', video.public_id, dto),
+    ).rejects.toThrow(VideoUploadNotInProgressException);
+    expect(storageService.completeMultipartUpload).not.toHaveBeenCalled();
+    expect(videoProcessingProducer.enqueueProcessing).not.toHaveBeenCalled();
+  });
+
+  it('throws InvalidUploadPartsException without changing status when storage rejects the parts', async () => {
+    const channel = makeChannel();
+    const video = makeVideo();
+    const channelsService = {
+      findByUserId: jest.fn().mockResolvedValue(channel),
+    } as any;
+    const videoRepository = makeVideoRepository({
+      findOne: jest.fn().mockResolvedValue(video),
+      update: jest.fn(),
+    });
+    const storageService = {
+      completeMultipartUpload: jest
+        .fn()
+        .mockRejectedValue(new StorageInvalidPartsException()),
+      headObject: jest.fn(),
+      deleteObject: jest.fn(),
+    } as any;
+    const videoProcessingProducer = { enqueueProcessing: jest.fn() } as any;
+    const service = new VideosService(
+      videoRepository,
+      channelsService,
+      storageService,
+      { maxUploadBytes: 12582912 } as any,
+      videoProcessingProducer,
+    );
+
+    await expect(
+      service.completeUpload('user-id', video.public_id, dto),
+    ).rejects.toThrow(InvalidUploadPartsException);
+    expect(storageService.completeMultipartUpload).toHaveBeenCalledWith(
+      video.original_key,
+      video.upload_id,
+      [
+        { partNumber: 1, etag: '"etag-1"' },
+        { partNumber: 2, etag: '"etag-2"' },
+      ],
+    );
+    expect(videoRepository.update).not.toHaveBeenCalled();
+    expect(videoProcessingProducer.enqueueProcessing).not.toHaveBeenCalled();
+  });
+
+  it('removes the object and the draft, then throws VideoTooLargeException when the real size exceeds the limit', async () => {
+    const channel = makeChannel();
+    const video = makeVideo({ size_bytes: 20000000 });
+    const channelsService = {
+      findByUserId: jest.fn().mockResolvedValue(channel),
+    } as any;
+    const videoRepository = makeVideoRepository({
+      findOne: jest.fn().mockResolvedValue(video),
+      delete: jest.fn(),
+    });
+    const storageService = {
+      completeMultipartUpload: jest.fn().mockResolvedValue(undefined),
+      headObject: jest.fn().mockResolvedValue({ contentLength: 20000000 }),
+      deleteObject: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    const videoProcessingProducer = { enqueueProcessing: jest.fn() } as any;
+    const service = new VideosService(
+      videoRepository,
+      channelsService,
+      storageService,
+      { maxUploadBytes: 12582912 } as any,
+      videoProcessingProducer,
+    );
+
+    await expect(
+      service.completeUpload('user-id', video.public_id, dto),
+    ).rejects.toThrow(VideoTooLargeException);
+    expect(storageService.deleteObject).toHaveBeenCalledWith(
+      video.original_key,
+    );
+    expect(videoRepository.delete).toHaveBeenCalledWith({ id: video.id });
+    expect(videoProcessingProducer.enqueueProcessing).not.toHaveBeenCalled();
+  });
+
+  it('removes the object and the draft, then throws UploadSizeMismatchException when the real size differs from size_bytes', async () => {
+    const channel = makeChannel();
+    const video = makeVideo({ size_bytes: 6291456 });
+    const channelsService = {
+      findByUserId: jest.fn().mockResolvedValue(channel),
+    } as any;
+    const videoRepository = makeVideoRepository({
+      findOne: jest.fn().mockResolvedValue(video),
+      delete: jest.fn(),
+    });
+    const storageService = {
+      completeMultipartUpload: jest.fn().mockResolvedValue(undefined),
+      headObject: jest.fn().mockResolvedValue({ contentLength: 7340032 }),
+      deleteObject: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    const videoProcessingProducer = { enqueueProcessing: jest.fn() } as any;
+    const service = new VideosService(
+      videoRepository,
+      channelsService,
+      storageService,
+      { maxUploadBytes: 12582912 } as any,
+      videoProcessingProducer,
+    );
+
+    await expect(
+      service.completeUpload('user-id', video.public_id, dto),
+    ).rejects.toThrow(UploadSizeMismatchException);
+    expect(storageService.deleteObject).toHaveBeenCalledWith(
+      video.original_key,
+    );
+    expect(videoRepository.delete).toHaveBeenCalledWith({ id: video.id });
+    expect(videoProcessingProducer.enqueueProcessing).not.toHaveBeenCalled();
+  });
+
+  it('moves the video to processing and enqueues the process job with jobId = videoId on success', async () => {
+    const channel = makeChannel();
+    const video = makeVideo({ size_bytes: 6291456 });
+    const channelsService = {
+      findByUserId: jest.fn().mockResolvedValue(channel),
+    } as any;
+    const videoRepository = makeVideoRepository({
+      findOne: jest.fn().mockResolvedValue(video),
+      update: jest.fn(),
+    });
+    const storageService = {
+      completeMultipartUpload: jest.fn().mockResolvedValue(undefined),
+      headObject: jest.fn().mockResolvedValue({ contentLength: 6291456 }),
+      deleteObject: jest.fn(),
+    } as any;
+    const videoProcessingProducer = {
+      enqueueProcessing: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    const service = new VideosService(
+      videoRepository,
+      channelsService,
+      storageService,
+      { maxUploadBytes: 12582912 } as any,
+      videoProcessingProducer,
+    );
+
+    const result = await service.completeUpload(
+      'user-id',
+      video.public_id,
+      dto,
+    );
+
+    expect(result).toEqual({
+      public_id: video.public_id,
+      status: VideoStatus.PROCESSING,
+    });
+    expect(videoRepository.update).toHaveBeenCalledWith(
+      { id: video.id },
+      expect.objectContaining({
+        status: VideoStatus.PROCESSING,
+        upload_id: null,
+        upload_completed_at: expect.any(Date),
+      }),
+    );
+    expect(videoProcessingProducer.enqueueProcessing).toHaveBeenCalledWith(
+      video.id,
+    );
+    expect(storageService.deleteObject).not.toHaveBeenCalled();
   });
 });

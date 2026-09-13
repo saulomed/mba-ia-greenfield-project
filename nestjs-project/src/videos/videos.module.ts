@@ -7,6 +7,7 @@ import { StorageModule } from '../storage/storage.module';
 import { Video } from './entities/video.entity';
 import { VideosController } from './videos.controller';
 import { VIDEO_QUEUES } from './videos.constants';
+import { VideoProcessingProducer } from './video-processing.producer';
 import { VideosService } from './videos.service';
 
 @Module({
@@ -21,7 +22,7 @@ import { VideosService } from './videos.service';
     ),
   ],
   controllers: [VideosController],
-  providers: [VideosService],
+  providers: [VideosService, VideoProcessingProducer],
   exports: [TypeOrmModule],
 })
 export class VideosModule {}

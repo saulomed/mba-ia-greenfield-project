@@ -7,13 +7,18 @@ import { ChannelsService } from '../channels/channels.service';
 import videoConfig from '../config/video.config';
 import { isPgUniqueViolationOnColumn } from '../common/database/pg-unique-violation.util';
 import { StorageService } from '../storage/storage.service';
+import { StorageInvalidPartsException } from '../storage/storage.exceptions';
+import type { CompleteVideoUploadDto } from './dto/complete-video-upload.dto';
 import type { CreatePartUrlsDto } from './dto/create-part-urls.dto';
 import type { CreateVideoUploadDto } from './dto/create-video-upload.dto';
 import type { VideoResponseDto } from './dto/video-response.dto';
 import { Video, VideoStatus } from './entities/video.entity';
 import { generatePublicId } from './public-id.util';
+import { VideoProcessingProducer } from './video-processing.producer';
 import {
   InvalidPartNumbersException,
+  InvalidUploadPartsException,
+  UploadSizeMismatchException,
   VideoNotFoundException,
   VideoTooLargeException,
   VideoUploadNotInProgressException,
@@ -77,6 +82,11 @@ export interface ListUploadedPartsResult {
   parts: UploadedPartInfo[];
 }
 
+export interface CompleteUploadResult {
+  public_id: string;
+  status: VideoStatus;
+}
+
 @Injectable()
 export class VideosService {
   constructor(
@@ -86,6 +96,7 @@ export class VideosService {
     private readonly storageService: StorageService,
     @Inject(videoConfig.KEY)
     private readonly config: ConfigType<typeof videoConfig>,
+    private readonly videoProcessingProducer: VideoProcessingProducer,
   ) {}
 
   private async requireChannel(userId: string): Promise<Channel> {
@@ -147,6 +158,66 @@ export class VideosService {
       parts,
       expires_at: new Date(Date.now() + ttlSeconds * 1000).toISOString(),
     };
+  }
+
+  async completeUpload(
+    userId: string,
+    publicId: string,
+    dto: CompleteVideoUploadDto,
+  ): Promise<CompleteUploadResult> {
+    const video = await this.requireUploadInProgress(userId, publicId);
+
+    const sortedParts = [...dto.parts].sort(
+      (a, b) => a.part_number - b.part_number,
+    );
+
+    try {
+      await this.storageService.completeMultipartUpload(
+        video.original_key,
+        video.upload_id!,
+        sortedParts.map((part) => ({
+          partNumber: part.part_number,
+          etag: part.etag,
+        })),
+      );
+    } catch (error) {
+      if (error instanceof StorageInvalidPartsException) {
+        throw new InvalidUploadPartsException();
+      }
+      throw error;
+    }
+
+    const { contentLength } = await this.storageService.headObject(
+      video.original_key,
+    );
+
+    if (contentLength > this.config.maxUploadBytes) {
+      await this.discardUpload(video);
+      throw new VideoTooLargeException();
+    }
+
+    if (contentLength !== video.size_bytes) {
+      await this.discardUpload(video);
+      throw new UploadSizeMismatchException();
+    }
+
+    await this.videoRepository.update(
+      { id: video.id },
+      {
+        status: VideoStatus.PROCESSING,
+        upload_completed_at: new Date(),
+        upload_id: null,
+      },
+    );
+
+    await this.videoProcessingProducer.enqueueProcessing(video.id);
+
+    return { public_id: video.public_id, status: VideoStatus.PROCESSING };
+  }
+
+  private async discardUpload(video: Video): Promise<void> {
+    await this.storageService.deleteObject(video.original_key);
+    await this.videoRepository.delete({ id: video.id });
   }
 
   async getOwnedVideo(
