@@ -27,7 +27,10 @@ export function createSyntheticStream(totalBytes: number): Readable {
   });
 }
 
-export function buildSyntheticPart(partNumber: number, sizeBytes: number): Buffer {
+export function buildSyntheticPart(
+  partNumber: number,
+  sizeBytes: number,
+): Buffer {
   const buffer = Buffer.alloc(sizeBytes);
   fillDeterministic(buffer, partNumber * sizeBytes);
   return buffer;

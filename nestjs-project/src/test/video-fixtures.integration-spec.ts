@@ -31,11 +31,14 @@ async function probe(filePath: string): Promise<FfprobeOutput> {
 }
 
 describe('video-fixtures', () => {
-  it.each(ALL_VIDEO_FIXTURES)('generates the %s fixture on demand', async (name) => {
-    const filePath = await getVideoFixture(name);
-    const stats = await stat(filePath);
-    expect(stats.size).toBeGreaterThan(0);
-  });
+  it.each(ALL_VIDEO_FIXTURES)(
+    'generates the %s fixture on demand',
+    async (name) => {
+      const filePath = await getVideoFixture(name);
+      const stats = await stat(filePath);
+      expect(stats.size).toBeGreaterThan(0);
+    },
+  );
 
   it('reports duration and resolution for mp4-h264-aac-faststart', async () => {
     const filePath = await getVideoFixture('mp4-h264-aac-faststart');

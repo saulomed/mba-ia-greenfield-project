@@ -20,7 +20,12 @@ interface FixtureSpec {
   truncateFrom?: VideoFixtureName;
 }
 
-const VIDEO_INPUT = ['-f', 'lavfi', '-i', 'testsrc2=duration=2:size=320x240:rate=25'];
+const VIDEO_INPUT = [
+  '-f',
+  'lavfi',
+  '-i',
+  'testsrc2=duration=2:size=320x240:rate=25',
+];
 const AUDIO_INPUT = ['-f', 'lavfi', '-i', 'sine=frequency=440:duration=2'];
 
 const FIXTURE_SPECS: Record<VideoFixtureName, FixtureSpec> = {
@@ -38,15 +43,36 @@ const FIXTURE_SPECS: Record<VideoFixtureName, FixtureSpec> = {
     fileName: 'fixture.mp4',
   },
   'mp4-h264-aac-no-faststart': {
-    ffmpegArgs: [...VIDEO_INPUT, ...AUDIO_INPUT, '-c:v', 'libx264', '-c:a', 'aac'],
+    ffmpegArgs: [
+      ...VIDEO_INPUT,
+      ...AUDIO_INPUT,
+      '-c:v',
+      'libx264',
+      '-c:a',
+      'aac',
+    ],
     fileName: 'fixture.mp4',
   },
   'mkv-hevc-aac': {
-    ffmpegArgs: [...VIDEO_INPUT, ...AUDIO_INPUT, '-c:v', 'libx265', '-c:a', 'aac'],
+    ffmpegArgs: [
+      ...VIDEO_INPUT,
+      ...AUDIO_INPUT,
+      '-c:v',
+      'libx265',
+      '-c:a',
+      'aac',
+    ],
     fileName: 'fixture.mkv',
   },
   'webm-vp9-opus': {
-    ffmpegArgs: [...VIDEO_INPUT, ...AUDIO_INPUT, '-c:v', 'libvpx-vp9', '-c:a', 'libopus'],
+    ffmpegArgs: [
+      ...VIDEO_INPUT,
+      ...AUDIO_INPUT,
+      '-c:v',
+      'libvpx-vp9',
+      '-c:a',
+      'libopus',
+    ],
     fileName: 'fixture.webm',
   },
   'mp4-video-only': {
@@ -54,7 +80,14 @@ const FIXTURE_SPECS: Record<VideoFixtureName, FixtureSpec> = {
     fileName: 'fixture.mp4',
   },
   truncated: {
-    ffmpegArgs: [...VIDEO_INPUT, ...AUDIO_INPUT, '-c:v', 'libx264', '-c:a', 'aac'],
+    ffmpegArgs: [
+      ...VIDEO_INPUT,
+      ...AUDIO_INPUT,
+      '-c:v',
+      'libx264',
+      '-c:a',
+      'aac',
+    ],
     fileName: 'fixture.mp4',
     truncateFrom: 'mp4-h264-aac-no-faststart',
   },
@@ -63,7 +96,10 @@ const FIXTURE_SPECS: Record<VideoFixtureName, FixtureSpec> = {
 const fixtureCache = new Map<VideoFixtureName, Promise<string>>();
 
 function hashArgs(parts: string[]): string {
-  return createHash('sha256').update(JSON.stringify(parts)).digest('hex').slice(0, 16);
+  return createHash('sha256')
+    .update(JSON.stringify(parts))
+    .digest('hex')
+    .slice(0, 16);
 }
 
 function fixtureDir(name: VideoFixtureName, spec: FixtureSpec): string {
@@ -98,7 +134,10 @@ async function runFfmpeg(args: string[], outputPath: string): Promise<void> {
   });
 }
 
-async function generateTruncated(spec: FixtureSpec, targetPath: string): Promise<void> {
+async function generateTruncated(
+  spec: FixtureSpec,
+  targetPath: string,
+): Promise<void> {
   if (!spec.truncateFrom) {
     throw new Error('truncated fixture spec is missing truncateFrom');
   }
@@ -107,7 +146,10 @@ async function generateTruncated(spec: FixtureSpec, targetPath: string): Promise
   const { size } = await stat(sourcePath);
   const keepBytes = Math.floor(size / 2);
 
-  await pipeline(createReadStream(sourcePath, { end: keepBytes - 1 }), createWriteStream(targetPath));
+  await pipeline(
+    createReadStream(sourcePath, { end: keepBytes - 1 }),
+    createWriteStream(targetPath),
+  );
 }
 
 export async function getVideoFixture(name: VideoFixtureName): Promise<string> {

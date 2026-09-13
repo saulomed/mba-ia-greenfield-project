@@ -29,9 +29,18 @@ export const envValidationSchema = Joi.object({
   STORAGE_BUCKET: Joi.string().default('streamtube'),
   QUEUE_HOST: Joi.string().default('redis'),
   QUEUE_PORT: Joi.number().port().default(6379),
-  VIDEO_MAX_UPLOAD_BYTES: Joi.number().integer().positive().default(10737418240),
-  VIDEO_UPLOAD_PART_URL_TTL_SECONDS: Joi.number().integer().positive().default(3600),
-  VIDEO_PLAYBACK_URL_TTL_SECONDS: Joi.number().integer().positive().default(900),
+  VIDEO_MAX_UPLOAD_BYTES: Joi.number()
+    .integer()
+    .positive()
+    .default(10737418240),
+  VIDEO_UPLOAD_PART_URL_TTL_SECONDS: Joi.number()
+    .integer()
+    .positive()
+    .default(3600),
+  VIDEO_PLAYBACK_URL_TTL_SECONDS: Joi.number()
+    .integer()
+    .positive()
+    .default(900),
   VIDEO_DRAFT_TTL_HOURS: Joi.number().integer().positive().default(24),
   VIDEO_MULTIPART_ABORT_DAYS: Joi.number().integer().positive().default(1),
 });

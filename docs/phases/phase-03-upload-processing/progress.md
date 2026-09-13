@@ -1,7 +1,7 @@
 # phase-03-upload-processing — Progress
 
 **Status:** in_progress
-**SIs:** 2/14 completed
+**SIs:** 3/14 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços de Storage, Fila e Worker
 - **Status:** completed
@@ -25,9 +25,14 @@
   - Incidente de ambiente (não é código): `npx tsc --noEmit` falhou uma vez com `EACCES` em `dist/tsconfig.tsbuildinfo` por um `dist/` criado antes com outro uid; corrigido com `docker compose exec -u root nestjs-api chown -R node:node dist`, conforme o `CLAUDE.md` do projeto. Sem impacto em código de produção.
 
 ### SI-03.3 — StorageModule com Multipart, URLs Pré-assinadas e Bootstrap do Bucket
-- **Status:** pending
-- **Tests:** —
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 11 passing (`storage.module.spec.ts`: 1; `storage.service.integration-spec.ts`: 5; `storage-bootstrap.service.integration-spec.ts`: 5); suíte completa 28 suites/174 testes, e2e 3 suites/52 testes, `tsc --noEmit` e `lint` limpos
+- **Observations:**
+  - `storageConfig` e `videoConfig` foram adicionados ao `load` do `ConfigModule` em `AppModule` (fechando a lacuna deixada intencionalmente pelo SI-03.1) e o novo `StorageModule` foi importado; `queueConfig` continua fora, pois nada o consome ainda.
+  - Erros do SDK (`InvalidPart`, `InvalidPartOrder`, `EntityTooSmall`, `NoSuchKey`/`NotFound`, `NoSuchUpload`) são traduzidos em `StorageService` para `StorageInvalidPartsException`/`StorageObjectNotFoundException` — exceções simples (`extends Error`), deliberadamente **não** subclasses de `DomainException`: são erros internos do módulo de storage que um SI futuro (conclusão do upload, `videos` module) deve capturar e re-mapear para os códigos do Error Catalog (ex. `INVALID_UPLOAD_PARTS`); torná-las `DomainException` deixaria erros de storage vazarem como resposta HTTP genérica sem passar pela tradução de domínio.
+  - Bug corrigido durante os testes: `storage.service.integration-spec.ts` não chamava `moduleRef.init()` após `compile()`, então o hook `OnApplicationBootstrap` (que cria o bucket) nunca disparava, causando `NoSuchBucket` em 5 testes — corrigido com `await moduleRef.init()` no `beforeAll`.
+  - Bug de tipos corrigido: `Buffer`/`Uint8Array<ArrayBufferLike>` do `@types/node` não é estruturalmente compatível com `BodyInit` do `fetch` global (lib DOM), quebrando `tsc --noEmit`. Corrigido com um cast `as BodyInit` na fronteira (helper `toBody`), seguindo o padrão do projeto para conflitos de tipos de biblioteca.
+  - Revisão `/simplify` aplicada: extraída `createS3Client(config, endpoint)` em `create-s3-client.ts`, reaproveitada nos dois providers de `storage.module.ts` e no teste de bootstrap (antes 3 construções manuais idênticas de `S3Client`); extraído `rethrowTranslated` em `storage.service.ts` para eliminar 3 blocos `try/catch` repetidos; nomeada a lista inline `['NoSuchUpload']`; `onApplicationBootstrap` agora aplica a lifecycle policy e a política de thumbnails em paralelo (`Promise.all`, ambas só dependem do bucket já existir, não uma da outra); `ensureBucketExists` trocou um `catch` genérico (tratava qualquer erro do `HeadBucketCommand` como "bucket não existe", violando a regra do projeto de nunca engolir erros) por uma checagem específica de `error.name === 'NotFound'` — validado empiricamente contra o MinIO real. Achado descartado conscientemente: `StorageException` não estender `DomainException` (ver acima, é a fronteira de tradução intencional do módulo).
 
 ### SI-03.4 — Entidade Video, Migration e Gerador de public_id
 - **Status:** pending
