@@ -31,6 +31,20 @@ docker compose exec nestjs-api npm install
 docker compose exec nestjs-api npm run start:dev
 ```
 
+**Known issue — UID mismatch on bind mount:** the `nestjs-api` container runs as `node` (uid 1000). If the host user's uid differs (check with `id -u` on the host), files bind-mounted from `.` are owned by the host uid, and `node` gets `EACCES` on `npm install` and on `nest start --watch` (which needs to create `dist/`). Workaround: run the first-time setup as root, which does not touch host file ownership:
+
+```bash
+docker compose exec -u root nestjs-api npm install
+docker compose exec -u root nestjs-api chown -R node:node node_modules package-lock.json
+docker compose exec -u root nestjs-api npm run start:dev   # if start:dev also hits EACCES on dist/
+```
+
+**First-time `.env` setup:** the repo ships only `.env.example`; copy it before first run:
+
+```bash
+cp .env.example .env
+```
+
 Services:
 - `nestjs-api` — NestJS API, port `3000`
 - `db` — PostgreSQL 17, port `5432`, database `streamtube`, user/password `streamtube`
