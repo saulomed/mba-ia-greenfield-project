@@ -14,6 +14,8 @@ import { StorageModule } from '../storage/storage.module';
 import { User } from '../users/entities/user.entity';
 import { Video } from '../videos/entities/video.entity';
 import { VIDEO_QUEUES } from '../videos/videos.constants';
+import { VideoMaintenanceConsumer } from './video-maintenance.consumer';
+import { VideoMaintenanceScheduler } from './video-maintenance.scheduler';
 import { VideoProcessingConsumer } from './video-processing.consumer';
 
 @Module({
@@ -47,6 +49,10 @@ import { VideoProcessingConsumer } from './video-processing.consumer';
       { name: VIDEO_QUEUES.MAINTENANCE },
     ),
   ],
-  providers: [VideoProcessingConsumer],
+  providers: [
+    VideoProcessingConsumer,
+    VideoMaintenanceConsumer,
+    VideoMaintenanceScheduler,
+  ],
 })
 export class WorkerModule {}
