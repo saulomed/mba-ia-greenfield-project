@@ -1,7 +1,7 @@
 # phase-03-upload-processing — Progress
 
 **Status:** in_progress
-**SIs:** 10/14 completed
+**SIs:** 11/14 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços de Storage, Fila e Worker
 - **Status:** completed
@@ -104,9 +104,17 @@
   - Skip consciente: a observação de Altitude sobre generalizar a tradução de erro de storage→domínio (hoje um único `if` em `completeUpload`) foi registrada como nota para o futuro, não aplicada agora por ser ocorrência única (evitar abstração prematura).
 
 ### SI-03.10 — Consumer de Processamento do Vídeo
-- **Status:** pending
-- **Tests:** —
-- **Observations:** none
+- **Status:** completed
+- **Tests:** Unit (`src/worker/video-processing.consumer.spec.ts`, 4 casos: diretório temporário removido mesmo quando `normalize` falha; handler `failed` não marca na tentativa não-final; handler `failed` marca `PROCESSING_ERROR` na tentativa final; handler `failed` não remarca vídeo já `failed`); Integration (`src/worker/video-processing.consumer.integration-spec.ts`, 4 casos com Postgres+MinIO+FFmpeg reais e fixtures da SI-03.2: `mkv-hevc-aac` → `ready` com metadados corretos, `playback.mp4` H.264/AAC no bucket e thumbnail pública com `Cache-Control: immutable`; `truncated` → `failed`/`INVALID_MEDIA` lançando `UnrecoverableError` sem retry; objeto original ausente → `failed`/`SOURCE_MISSING`; reprocessar vídeo já `ready` não altera `playback_key`/`thumbnail_key`/`processed_at`); suíte completa 40 suites/240 testes, e2e 7 suites/79 testes (`--runInBand`), `tsc --noEmit` limpo, `lint` limpo nos arquivos de produção (`video-processing.consumer.ts`, `worker.module.ts`)
+- **Observations:**
+  - `WorkerModule` precisou registrar `TypeOrmModule.forFeature([Video, Channel, User])`, não só `[Video]`: a relação `@ManyToOne(() => Channel)` de `Video` (e `@OneToOne(() => User)` de `Channel`) exige que TypeORM resolva o grafo de relações completo mesmo com `autoLoadEntities: true`; sem isso o bootstrap falha com `TypeORMError: Entity metadata for Video#channel was not found` (verificado rodando `worker.module.spec.ts`, que já existia e passou a falhar sem o fix). É só registro de entidade, não importa controllers/módulos HTTP, então não viola o isolamento pedido por TD-04.
+  - Aplicado o achado de Efficiency de paralelizar os dois uploads finais (`playback.mp4` e a thumbnail) via `Promise.all`, já que são I/O de rede independente sem dependência de resultado entre si.
+  - Skip consciente: Simplification sugeriu reduzir `TypeOrmModule.forFeature` para `[Video]` alegando que `autoLoadEntities` já bastaria e que nada injeta `Channel`/`User`; pulado porque contradiz a falha real já verificada em execução — o registro de `Channel`/`User` é para completar o grafo de relações do TypeORM, não para injeção de repositório.
+  - Skip consciente: Altitude sugeriu tornar a chave da thumbnail determinística (`thumbnails/{public_id}/thumbnail.jpg`, como o `playback_key`) para evitar objetos órfãos em retries; pulado por contradizer a ação técnica literal do plano (`thumbnails/{randomBytes(16) em hex}.jpg`) e a decisão de TD-11 (Option C), que exige chaves aleatórias e imutáveis justamente para permitir `Cache-Control: immutable` com cache de navegador/CDN sem invalidação. A observação de objetos órfãos de thumbnail em retries após falha parcial fica registrada como possível trabalho futuro de limpeza (fora do escopo desta SI).
+  - Skip consciente: Reuse apontou que `randomBytes(16).toString('hex')` já aparece em `src/channels/nickname.util.ts` e `src/auth/auth.service.ts`; pulado por ser um one-liner trivial de stdlib cuja extração não reduziria duplicação real (os dois usos já commitados ficariam fora do escopo desta SI) e por convergência única (Reuse), não múltipla.
+  - Skip consciente: Reuse também apontou que o helper `createDraftVideo` do novo integration-spec duplica o padrão `createChannel`/`baseVideoData` de `video.entity.integration-spec.ts` (SI já commitada); pulado por exigir tocar um arquivo de SI anterior fora do escopo, com apenas 2 ocorrências no projeto.
+  - Skip consciente: Efficiency sugeriu tornar `job.updateProgress(N)` fire-and-forget para não bloquear o pipeline aguardando o Redis; pulado por ser uma observação menor do próprio agente e por conflitar com a previsibilidade de progresso pedida pelo plano ("atualizando job.updateProgress a cada etapa").
+  - Skip consciente: Simplification sugeriu extrair um helper `makeConsumer(videoRepository)` no unit spec para reduzir repetição em `onFailed`; pulado por ganho marginal, conforme o próprio agente registrou.
 
 ### SI-03.11 — Endpoint GET /videos/:publicId (Detalhe para o Dono)
 - **Status:** completed

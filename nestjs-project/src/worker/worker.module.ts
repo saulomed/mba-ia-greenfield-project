@@ -7,10 +7,14 @@ import { envValidationSchema } from '../config/env.validation';
 import queueConfig from '../config/queue.config';
 import storageConfig from '../config/storage.config';
 import videoConfig from '../config/video.config';
+import { Channel } from '../channels/entities/channel.entity';
 import { MediaModule } from '../media/media.module';
 import { QueueModule } from '../queue/queue.module';
 import { StorageModule } from '../storage/storage.module';
+import { User } from '../users/entities/user.entity';
+import { Video } from '../videos/entities/video.entity';
 import { VIDEO_QUEUES } from '../videos/videos.constants';
+import { VideoProcessingConsumer } from './video-processing.consumer';
 
 @Module({
   imports: [
@@ -37,10 +41,12 @@ import { VIDEO_QUEUES } from '../videos/videos.constants';
     QueueModule,
     StorageModule,
     MediaModule,
+    TypeOrmModule.forFeature([Video, Channel, User]),
     BullModule.registerQueue(
       { name: VIDEO_QUEUES.PROCESSING },
       { name: VIDEO_QUEUES.MAINTENANCE },
     ),
   ],
+  providers: [VideoProcessingConsumer],
 })
 export class WorkerModule {}
