@@ -8,9 +8,11 @@ import { StorageService } from '../storage/storage.service';
 import { StorageObjectNotFoundException } from '../storage/storage.exceptions';
 import { cleanAllTables } from '../test/create-test-data-source';
 import { buildSyntheticPart } from '../test/synthetic-bytes';
+import { getVideoFixture } from '../test/video-fixtures';
 import { User } from '../users/entities/user.entity';
 import { videosTestingModuleImports } from './test/videos-testing-module';
 import { Video, VideoStatus } from './entities/video.entity';
+import { generatePublicId } from './public-id.util';
 import { VideosModule } from './videos.module';
 import { VideosService } from './videos.service';
 import { VideoTooLargeException } from './video.exceptions';
@@ -199,5 +201,73 @@ describe('VideosService (integration)', () => {
     await expect(storageService.headObject(originalKey)).rejects.toThrow(
       StorageObjectNotFoundException,
     );
+  });
+
+  async function createReadyVideo(
+    overrides: Partial<Video> = {},
+  ): Promise<{ user: User; video: Video }> {
+    const { user, channel } = await createUserWithChannel();
+    const publicId = generatePublicId();
+    const video = await videoRepository.save(
+      videoRepository.create({
+        public_id: publicId,
+        channel_id: channel.id,
+        title: 'My video',
+        original_filename: 'Minhas Férias.mp4',
+        mime_type: 'video/mp4',
+        size_bytes: 1024,
+        original_key: `videos/${publicId}/original`,
+        playback_key: `videos/${publicId}/playback.mp4`,
+        status: VideoStatus.READY,
+        ...overrides,
+      }),
+    );
+    return { user, video };
+  }
+
+  describe('getStreamUrl', () => {
+    it('issues a presigned URL that MinIO serves Range requests on', async () => {
+      const { user, video } = await createReadyVideo();
+      const fixturePath = await getVideoFixture('mp4-h264-aac-faststart');
+      await storageService.uploadFile(fixturePath, video.playback_key!, {
+        contentType: 'video/mp4',
+      });
+
+      const result = await videosService.getStreamUrl(user.id, video.public_id);
+
+      expect(result.content_type).toBe('video/mp4');
+      const res = await fetch(result.url, {
+        headers: { Range: 'bytes=0-1023' },
+      });
+      expect(res.status).toBe(206);
+      const body = await res.arrayBuffer();
+      expect(body.byteLength).toBe(1024);
+      expect(res.headers.get('content-range')).toMatch(/^bytes 0-1023\//);
+    });
+  });
+
+  describe('getDownloadUrl', () => {
+    it('issues a presigned URL that serves the original with an attachment Content-Disposition', async () => {
+      const { user, video } = await createReadyVideo();
+      const fixturePath = await getVideoFixture('mp4-h264-aac-faststart');
+      await storageService.uploadFile(fixturePath, video.original_key, {
+        contentType: 'video/mp4',
+      });
+
+      const result = await videosService.getDownloadUrl(
+        user.id,
+        video.public_id,
+      );
+
+      expect(result.filename).toBe('Minhas Férias.mp4');
+      const res = await fetch(result.url);
+      expect(res.status).toBe(200);
+      const disposition = res.headers.get('content-disposition');
+      expect(disposition).toContain('attachment');
+      expect(disposition).toContain('filename="Minhas Ferias.mp4"');
+      expect(disposition).toContain(
+        "filename*=UTF-8''Minhas%20F%C3%A9rias.mp4",
+      );
+    });
   });
 });

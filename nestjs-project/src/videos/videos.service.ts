@@ -6,12 +6,15 @@ import { Channel } from '../channels/entities/channel.entity';
 import { ChannelsService } from '../channels/channels.service';
 import videoConfig from '../config/video.config';
 import { isPgUniqueViolationOnColumn } from '../common/database/pg-unique-violation.util';
+import { buildAttachmentContentDisposition } from '../common/http/content-disposition.util';
 import { StorageService } from '../storage/storage.service';
 import { StorageInvalidPartsException } from '../storage/storage.exceptions';
 import type { CompleteVideoUploadDto } from './dto/complete-video-upload.dto';
 import type { CreatePartUrlsDto } from './dto/create-part-urls.dto';
 import type { CreateVideoUploadDto } from './dto/create-video-upload.dto';
+import type { VideoDownloadResponseDto } from './dto/video-download-response.dto';
 import type { VideoResponseDto } from './dto/video-response.dto';
+import type { VideoStreamResponseDto } from './dto/video-stream-response.dto';
 import { Video, VideoStatus } from './entities/video.entity';
 import { generatePublicId } from './public-id.util';
 import { VideoProcessingProducer } from './video-processing.producer';
@@ -20,6 +23,7 @@ import {
   InvalidUploadPartsException,
   UploadSizeMismatchException,
   VideoNotFoundException,
+  VideoNotReadyException,
   VideoTooLargeException,
   VideoUploadNotInProgressException,
 } from './video.exceptions';
@@ -245,6 +249,54 @@ export class VideosService {
       created_at: video.created_at,
       processed_at: video.processed_at,
     };
+  }
+
+  private async requireReady(userId: string, publicId: string): Promise<Video> {
+    const video = await this.findOwnedByPublicId(userId, publicId);
+    if (video.status !== VideoStatus.READY) {
+      throw new VideoNotReadyException();
+    }
+    return video;
+  }
+
+  private async presignExpiring(
+    key: string,
+    options: { responseContentDisposition?: string } = {},
+  ): Promise<{ url: string; expires_at: string }> {
+    const ttlSeconds = this.config.playbackUrlTtlSeconds;
+    const url = await this.storageService.presignGetObject(
+      key,
+      ttlSeconds,
+      options,
+    );
+    return {
+      url,
+      expires_at: new Date(Date.now() + ttlSeconds * 1000).toISOString(),
+    };
+  }
+
+  async getStreamUrl(
+    userId: string,
+    publicId: string,
+  ): Promise<VideoStreamResponseDto> {
+    const video = await this.requireReady(userId, publicId);
+    const { url, expires_at } = await this.presignExpiring(video.playback_key!);
+
+    return { url, expires_at, content_type: 'video/mp4' };
+  }
+
+  async getDownloadUrl(
+    userId: string,
+    publicId: string,
+  ): Promise<VideoDownloadResponseDto> {
+    const video = await this.requireReady(userId, publicId);
+    const { url, expires_at } = await this.presignExpiring(video.original_key, {
+      responseContentDisposition: buildAttachmentContentDisposition(
+        video.original_filename,
+      ),
+    });
+
+    return { url, expires_at, filename: video.original_filename };
   }
 
   async listUploadedParts(

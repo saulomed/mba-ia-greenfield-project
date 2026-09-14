@@ -22,7 +22,9 @@ import { ApiErrorEnvelope } from '../common/openapi/api-error-envelope.dto';
 import { CompleteVideoUploadDto } from './dto/complete-video-upload.dto';
 import { CreatePartUrlsDto } from './dto/create-part-urls.dto';
 import { CreateVideoUploadDto } from './dto/create-video-upload.dto';
+import { VideoDownloadResponseDto } from './dto/video-download-response.dto';
 import { VideoResponseDto } from './dto/video-response.dto';
+import { VideoStreamResponseDto } from './dto/video-stream-response.dto';
 import type {
   CompleteUploadResult,
   CreatePartUrlsResult,
@@ -270,5 +272,75 @@ export class VideosController {
     @Param('publicId') publicId: string,
   ): Promise<VideoResponseDto> {
     return this.videosService.getOwnedVideo(user.sub, publicId);
+  }
+
+  @Get(':publicId/stream')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Issue a presigned playback URL',
+    description:
+      'Returns a short-lived presigned GetObject URL for the normalized playback artifact, so the browser can issue Range requests directly to storage.',
+  })
+  @ApiParam({ name: 'publicId', description: 'Video public_id' })
+  @ApiResponse({
+    status: 200,
+    description: 'Presigned playback URL issued',
+    type: VideoStreamResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Missing or invalid access token',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Video not found',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Video is not ready',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  async getStreamUrl(
+    @CurrentUser() user: JwtPayload,
+    @Param('publicId') publicId: string,
+  ): Promise<VideoStreamResponseDto> {
+    return this.videosService.getStreamUrl(user.sub, publicId);
+  }
+
+  @Get(':publicId/download')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Issue a presigned download URL',
+    description:
+      'Returns a short-lived presigned GetObject URL for the original uploaded file, with a Content-Disposition attachment header carrying the original filename.',
+  })
+  @ApiParam({ name: 'publicId', description: 'Video public_id' })
+  @ApiResponse({
+    status: 200,
+    description: 'Presigned download URL issued',
+    type: VideoDownloadResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Missing or invalid access token',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Video not found',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Video is not ready',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  async getDownloadUrl(
+    @CurrentUser() user: JwtPayload,
+    @Param('publicId') publicId: string,
+  ): Promise<VideoDownloadResponseDto> {
+    return this.videosService.getDownloadUrl(user.sub, publicId);
   }
 }

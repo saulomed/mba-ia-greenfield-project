@@ -8,6 +8,7 @@ import {
   InvalidUploadPartsException,
   UploadSizeMismatchException,
   VideoNotFoundException,
+  VideoNotReadyException,
   VideoTooLargeException,
   VideoUploadNotInProgressException,
 } from './video.exceptions';
@@ -443,6 +444,121 @@ describe('VideosService.getOwnedVideo', () => {
     expect(typeof result.size_bytes).toBe('number');
     expect(result.duration_seconds).toBe(12.5);
     expect(typeof result.duration_seconds).toBe('number');
+  });
+});
+
+describe.each([['getStreamUrl' as const], ['getDownloadUrl' as const]])(
+  'VideosService.%s',
+  (method) => {
+    it.each([
+      VideoStatus.UPLOADING,
+      VideoStatus.PROCESSING,
+      VideoStatus.FAILED,
+    ])('throws VideoNotReadyException when status is %s', async (status) => {
+      const channel = makeChannel();
+      const video = makeVideo({ status });
+      const channelsService = {
+        findByUserId: jest.fn().mockResolvedValue(channel),
+      } as any;
+      const videoRepository = makeVideoRepository({
+        findOne: jest.fn().mockResolvedValue(video),
+      });
+      const service = new VideosService(
+        videoRepository,
+        channelsService,
+        {} as any,
+        { playbackUrlTtlSeconds: 900 } as any,
+        {} as any,
+      );
+
+      await expect(service[method]('user-id', video.public_id)).rejects.toThrow(
+        VideoNotReadyException,
+      );
+    });
+  },
+);
+
+describe('VideosService.getStreamUrl', () => {
+  it('presigns the playback_key and sets expires_at respecting the TTL', async () => {
+    const channel = makeChannel();
+    const video = makeVideo({
+      status: VideoStatus.READY,
+      playback_key: 'videos/AAAAAAAAAAA/playback.mp4',
+    });
+    const channelsService = {
+      findByUserId: jest.fn().mockResolvedValue(channel),
+    } as any;
+    const videoRepository = makeVideoRepository({
+      findOne: jest.fn().mockResolvedValue(video),
+    });
+    const storageService = {
+      presignGetObject: jest
+        .fn()
+        .mockResolvedValue('https://storage.example/signed-playback'),
+    } as any;
+    const service = new VideosService(
+      videoRepository,
+      channelsService,
+      storageService,
+      { playbackUrlTtlSeconds: 900 } as any,
+      {} as any,
+    );
+
+    const before = Date.now();
+    const result = await service.getStreamUrl('user-id', video.public_id);
+    const after = Date.now();
+
+    expect(result.url).toBe('https://storage.example/signed-playback');
+    expect(result.content_type).toBe('video/mp4');
+    const expiresAt = new Date(result.expires_at).getTime();
+    expect(expiresAt).toBeGreaterThanOrEqual(before + 900 * 1000);
+    expect(expiresAt).toBeLessThanOrEqual(after + 900 * 1000);
+    expect(storageService.presignGetObject).toHaveBeenCalledWith(
+      video.playback_key,
+      900,
+      {},
+    );
+  });
+});
+
+describe('VideosService.getDownloadUrl', () => {
+  it('presigns the original_key with an attachment Content-Disposition for the original filename', async () => {
+    const channel = makeChannel();
+    const video = makeVideo({
+      status: VideoStatus.READY,
+      original_filename: 'Minhas Férias.mp4',
+    });
+    const channelsService = {
+      findByUserId: jest.fn().mockResolvedValue(channel),
+    } as any;
+    const videoRepository = makeVideoRepository({
+      findOne: jest.fn().mockResolvedValue(video),
+    });
+    const storageService = {
+      presignGetObject: jest
+        .fn()
+        .mockResolvedValue('https://storage.example/signed-download'),
+    } as any;
+    const service = new VideosService(
+      videoRepository,
+      channelsService,
+      storageService,
+      { playbackUrlTtlSeconds: 900 } as any,
+      {} as any,
+    );
+
+    const result = await service.getDownloadUrl('user-id', video.public_id);
+
+    expect(result.url).toBe('https://storage.example/signed-download');
+    expect(result.filename).toBe('Minhas Férias.mp4');
+    expect(storageService.presignGetObject).toHaveBeenCalledWith(
+      video.original_key,
+      900,
+      {
+        responseContentDisposition:
+          'attachment; filename="Minhas Ferias.mp4"; filename*=UTF-8\'\'Minhas%20F%C3%A9rias.mp4',
+      },
+    );
   });
 });
 
