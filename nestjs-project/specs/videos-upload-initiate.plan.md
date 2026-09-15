@@ -1,7 +1,7 @@
 ---
 subproject: backend
 runner: jest+supertest
-scope: phase-03-upload-processing
+scope: phase-03-videos
 si: SI-03.7
 target_file: nestjs-project/test/videos-upload-initiate.e2e-spec.ts
 ---

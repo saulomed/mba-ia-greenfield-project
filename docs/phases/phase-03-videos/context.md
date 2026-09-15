@@ -1,9 +1,9 @@
 ---
 kind: phase
-name: phase-03-upload-processing
+name: phase-03-videos
 sources_mtime:
   docs/project-plan.md: "2026-09-13T14:07:43Z"
-  docs/decisions/technical-decisions-phase-03-upload-processing.md: "2026-09-13T17:04:25Z"
+  docs/decisions/technical-decisions-phase-03-videos.md: "2026-09-13T17:04:25Z"
   docs/decisions/technical-decisions-openapi-docs-nestjs.md: "2026-09-13T14:07:43Z"
   docs/decisions/technical-decisions-next-frontend-config-base.md: "2026-09-13T14:07:43Z"
   docs/decisions/technical-decisions-next-frontend-openapi-typing.md: "2026-09-13T14:07:43Z"
@@ -14,7 +14,7 @@ sources_mtime:
   .claude/skills/testing-guide-nestjs-project/SKILL.md: "2026-09-13T14:07:43Z"
 ---
 
-# phase-03-upload-processing — Context
+# phase-03-videos — Context
 
 ## Scope
 
@@ -40,7 +40,7 @@ sources_mtime:
 
 - `nestjs-project` — slice backend-only (módulo de vídeos, integração com object storage, fila e Video Worker).
 
-**Deferred subprojects:** `next-frontend` (por definição do slice `phase-03-upload-processing`; o project-plan.md não cita subprojetos nesta fase)
+**Deferred subprojects:** `next-frontend` (por definição do slice `phase-03-videos`; o project-plan.md não cita subprojetos nesta fase)
 
 **Sequencing notes:** > Depende de: Fase 01, Fase 02
 
@@ -53,95 +53,95 @@ sources_mtime:
 
 | Ref | Source | Scope | Topic | Status | Decision | Libraries |
 |-----|--------|-------|-------|--------|----------|-----------|
-| phase-03-upload-processing/TD-01 | phase | Cross-layer | Protocolo de Upload Retomável (10GB) | decided | A (S3 Multipart com URLs pré-assinadas por parte) | @aws-sdk/client-s3, @aws-sdk/s3-request-presigner |
-| phase-03-upload-processing/TD-02 | phase | Backend | Object Storage e Cliente de Acesso | decided | A (MinIO no Compose + @aws-sdk/client-s3 v3 com forcePathStyle) | @aws-sdk/client-s3 |
-| phase-03-upload-processing/TD-03 | phase | Backend | Tecnologia da Fila de Processamento | decided | A (BullMQ + Redis via @nestjs/bullmq) | @nestjs/bullmq, bullmq |
-| phase-03-upload-processing/TD-04 | phase | Backend | Topologia de Execução do Video Worker | decided | A (Container separado, mesmo codebase, entrypoint próprio) | — |
-| phase-03-upload-processing/TD-05 | phase | Backend | Integração com FFmpeg/FFprobe | decided | A (FFmpeg do sistema na imagem do worker + wrapper sobre child_process.spawn) | — |
-| phase-03-upload-processing/TD-06 | phase | Backend | Gatilho de Conclusão do Upload e Enfileiramento | decided | A (Endpoint explícito de conclusão na API) | — |
-| phase-03-upload-processing/TD-07 | phase | Cross-layer | Identificador Público Único do Vídeo (URL) | decided | B (ID curto base62 aleatório em coluna public_id; PK continua UUID) | — |
-| phase-03-upload-processing/TD-08 | phase | Cross-layer | Formato de Reprodução (Original vs Normalizado vs HLS) | decided | B (MP4 H.264/AAC normalizado com +faststart, servido progressivo) | — |
-| phase-03-upload-processing/TD-09 | phase | Cross-layer | Entrega de Streaming e Download | decided | A (URLs pré-assinadas de GetObject com expiração curta, emitidas pela API) | @aws-sdk/s3-request-presigner |
-| phase-03-upload-processing/TD-10 | phase | Backend | Limpeza de Uploads Abandonados e Rascunhos Órfãos | decided | A (Lifecycle AbortIncompleteMultipartUpload + job agendado de rascunhos expirados) | — |
-| phase-03-upload-processing/TD-11 | phase | Cross-layer | Entrega de Thumbnails ao Navegador | decided | C (Prefixo público thumbnails/ com chaves imprevisíveis e imutáveis) | — |
-| phase-03-upload-processing/TD-12 | phase | Backend | Estratégia de Fixtures de Vídeo para Testes (Simulação de Arquivos Grandes) | decided | B (Geração sob demanda com FFmpeg lavfi + stream sintético + limite configurável) | — |
+| phase-03-videos/TD-01 | phase | Cross-layer | Protocolo de Upload Retomável (10GB) | decided | A (S3 Multipart com URLs pré-assinadas por parte) | @aws-sdk/client-s3, @aws-sdk/s3-request-presigner |
+| phase-03-videos/TD-02 | phase | Backend | Object Storage e Cliente de Acesso | decided | A (MinIO no Compose + @aws-sdk/client-s3 v3 com forcePathStyle) | @aws-sdk/client-s3 |
+| phase-03-videos/TD-03 | phase | Backend | Tecnologia da Fila de Processamento | decided | A (BullMQ + Redis via @nestjs/bullmq) | @nestjs/bullmq, bullmq |
+| phase-03-videos/TD-04 | phase | Backend | Topologia de Execução do Video Worker | decided | A (Container separado, mesmo codebase, entrypoint próprio) | — |
+| phase-03-videos/TD-05 | phase | Backend | Integração com FFmpeg/FFprobe | decided | A (FFmpeg do sistema na imagem do worker + wrapper sobre child_process.spawn) | — |
+| phase-03-videos/TD-06 | phase | Backend | Gatilho de Conclusão do Upload e Enfileiramento | decided | A (Endpoint explícito de conclusão na API) | — |
+| phase-03-videos/TD-07 | phase | Cross-layer | Identificador Público Único do Vídeo (URL) | decided | B (ID curto base62 aleatório em coluna public_id; PK continua UUID) | — |
+| phase-03-videos/TD-08 | phase | Cross-layer | Formato de Reprodução (Original vs Normalizado vs HLS) | decided | B (MP4 H.264/AAC normalizado com +faststart, servido progressivo) | — |
+| phase-03-videos/TD-09 | phase | Cross-layer | Entrega de Streaming e Download | decided | A (URLs pré-assinadas de GetObject com expiração curta, emitidas pela API) | @aws-sdk/s3-request-presigner |
+| phase-03-videos/TD-10 | phase | Backend | Limpeza de Uploads Abandonados e Rascunhos Órfãos | decided | A (Lifecycle AbortIncompleteMultipartUpload + job agendado de rascunhos expirados) | — |
+| phase-03-videos/TD-11 | phase | Cross-layer | Entrega de Thumbnails ao Navegador | decided | C (Prefixo público thumbnails/ com chaves imprevisíveis e imutáveis) | — |
+| phase-03-videos/TD-12 | phase | Backend | Estratégia de Fixtures de Vídeo para Testes (Simulação de Arquivos Grandes) | decided | B (Geração sob demanda com FFmpeg lavfi + stream sintético + limite configurável) | — |
 
 _Source files:_
 
-- phase-03-upload-processing — `docs/decisions/technical-decisions-phase-03-upload-processing.md` (scope_type: phase, related_phases: [3])
+- phase-03-videos — `docs/decisions/technical-decisions-phase-03-videos.md` (scope_type: phase, related_phases: [3])
 
 ## Capability Coverage
 
 | Capability (from project-plan.md) | Covered by |
 |-----------------------------------|------------|
-| Serviço de armazenamento de arquivos (vídeos e thumbnails) | phase-03-upload-processing/TD-02, phase-03-upload-processing/TD-11 |
-| Serviço de processamento em segundo plano (filas) | phase-03-upload-processing/TD-03, phase-03-upload-processing/TD-04 |
-| Upload de vídeos com suporte a arquivos de até 10GB sem impacto na performance | phase-03-upload-processing/TD-01, phase-03-upload-processing/TD-10, phase-03-upload-processing/TD-12 |
-| Pré-cadastro automático do vídeo como rascunho ao iniciar o upload | phase-03-upload-processing/TD-01, phase-03-upload-processing/TD-10 |
-| Processamento automático do vídeo após upload (extração de duração e metadados) | phase-03-upload-processing/TD-04, phase-03-upload-processing/TD-05, phase-03-upload-processing/TD-06, phase-03-upload-processing/TD-12 |
-| Geração automática de thumbnail a partir de um frame do vídeo | phase-03-upload-processing/TD-05, phase-03-upload-processing/TD-11, phase-03-upload-processing/TD-12 |
-| URL única por vídeo, sem conflito com outros vídeos | phase-03-upload-processing/TD-07 |
-| Reprodução via streaming (sem necessidade de download completo) | phase-03-upload-processing/TD-08, phase-03-upload-processing/TD-09 |
-| Download do vídeo pelo usuário | phase-03-upload-processing/TD-09 |
+| Serviço de armazenamento de arquivos (vídeos e thumbnails) | phase-03-videos/TD-02, phase-03-videos/TD-11 |
+| Serviço de processamento em segundo plano (filas) | phase-03-videos/TD-03, phase-03-videos/TD-04 |
+| Upload de vídeos com suporte a arquivos de até 10GB sem impacto na performance | phase-03-videos/TD-01, phase-03-videos/TD-10, phase-03-videos/TD-12 |
+| Pré-cadastro automático do vídeo como rascunho ao iniciar o upload | phase-03-videos/TD-01, phase-03-videos/TD-10 |
+| Processamento automático do vídeo após upload (extração de duração e metadados) | phase-03-videos/TD-04, phase-03-videos/TD-05, phase-03-videos/TD-06, phase-03-videos/TD-12 |
+| Geração automática de thumbnail a partir de um frame do vídeo | phase-03-videos/TD-05, phase-03-videos/TD-11, phase-03-videos/TD-12 |
+| URL única por vídeo, sem conflito com outros vídeos | phase-03-videos/TD-07 |
+| Reprodução via streaming (sem necessidade de download completo) | phase-03-videos/TD-08, phase-03-videos/TD-09 |
+| Download do vídeo pelo usuário | phase-03-videos/TD-09 |
 
 ## Decisions Detail
 
-### phase-03-upload-processing/TD-01
+### phase-03-videos/TD-01
 
 **Recommendation:** é a única opção que tira os bytes de vídeo da API e do BFF e ainda permite retomada. É também o caminho já registrado como premissa em `next-frontend-config-base/TD-03`. O custo extra (CORS no bucket e lógica de partes no cliente) é pontual. Com tus, a API seria o gargalo de ingestão, e contornar isso exigiria outro serviço fora do diagrama C4.
 **Libraries:** @aws-sdk/client-s3, @aws-sdk/s3-request-presigner
 
-### phase-03-upload-processing/TD-02
+### phase-03-videos/TD-02
 
 **Recommendation:** é pré-requisito técnico de TD-01 A e TD-09 A e mantém paridade dev/prod com uma troca só de configuração. O custo real é a separação entre endpoint interno e público, que precisa estar no conjunto canônico de env vars desde o início.
 **Libraries:** @aws-sdk/client-s3
 
-### phase-03-upload-processing/TD-03
+### phase-03-videos/TD-03
 
 **Recommendation:** com ressalva honesta — a integração oficial `@nestjs/bullmq` e os recursos prontos (retry, backoff, progresso, concorrência) reduzem código próprio no ponto mais crítico da fase. A Option B é tecnicamente equivalente em confiabilidade e ganha em infraestrutura (sem Redis) e em atomicidade. Se evitar um novo serviço for prioridade, B é uma escolha defensável; o custo é escrever a integração Nest manualmente.
 **Libraries:** @nestjs/bullmq, bullmq
 
-### phase-03-upload-processing/TD-04
+### phase-03-videos/TD-04
 
 **Recommendation:** é o único formato que isola de fato o FFmpeg da API sem abrir mão de DI e das entidades já existentes. Também materializa o container "Video Worker" do C4 sem introduzir um novo subprojeto.
 **Libraries:** —
 
-### phase-03-upload-processing/TD-05
+### phase-03-videos/TD-05
 
 **Recommendation:** com as bibliotecas de alto nível arquivadas, a invocação direta é o caminho sustentável. A necessidade é pequena (um `ffprobe` JSON e um frame de thumbnail), o que cabe em um wrapper enxuto e testável. O binário fica restrito à imagem do worker.
 **Libraries:** —
 
-### phase-03-upload-processing/TD-06
+### phase-03-videos/TD-06
 
 **Recommendation:** mantém a API como dona do ciclo de vida do vídeo e valida tamanho e posse antes de gastar CPU. Também evita configuração de eventos que diverge entre MinIO e S3. O caso "cliente abandonou antes do complete" é coberto pela política de TD-10.
 **Libraries:** —
 
-### phase-03-upload-processing/TD-07
+### phase-03-videos/TD-07
 
 **Recommendation:** é a única opção que atende ao mesmo tempo "curta", "nunca conflita" (garantido pelo `UNIQUE`) e "não enumerável". Esse último ponto é pré-requisito do fluxo unlisted da Fase 05. A PK UUID permanece, preservando a convenção das entidades existentes.
 **Libraries:** —
 
-### phase-03-upload-processing/TD-08
+### phase-03-videos/TD-08
 
 **Recommendation:** é o mínimo que garante o bullet de streaming (início sem baixar tudo) para qualquer upload, sem a complexidade de HLS. Na maioria dos casos o custo cai para um remux barato. HLS pode entrar numa fase posterior sem quebrar o contrato: basta trocar o artefato de playback. A Option A é aceitável se o time preferir restringir formatos para manter a fase enxuta.
 **Libraries:** —
 
-### phase-03-upload-processing/TD-09
+### phase-03-videos/TD-09
 
 **Recommendation:** reaproveita o storage para Range e banda, mantém o bucket privado para as regras de visibilidade das próximas fases e cobre streaming e download com um único mecanismo. Também é coerente com a premissa já registrada no BFF estrito.
 **Libraries:** @aws-sdk/s3-request-presigner
 
-### phase-03-upload-processing/TD-10
+### phase-03-videos/TD-10
 
 **Recommendation:** delega ao storage o que ele já faz de forma confiável (abortar multipart incompleto) e deixa ao código só a parte de domínio (estado do rascunho). O prazo fica numa única variável de configuração.
 **Libraries:** —
 
-### phase-03-upload-processing/TD-11
+### phase-03-videos/TD-11
 
 **Recommendation:** thumbnails são ativos pequenos cujo valor está no cache. Só URLs estáveis permitem cache em navegador, `next/image` e CDN nas listagens das Fases 04, 05 e 07 sem gastar a API ou o BFF. A exposição é limitada a quem já tem a chave aleatória, e o prefixo não é listável. O vídeo, que é o conteúdo sensível, continua privado pela TD-09. Se o time exigir que thumbnails de rascunho sejam estritamente privadas, a Option B é o compromisso aceitável; A e D trocam cache ou performance por uma proteção que a thumbnail raramente justifica.
 **Libraries:** —
 
-### phase-03-upload-processing/TD-12
+### phase-03-videos/TD-12
 
 **Recommendation:** separa as três necessidades: mídia válida pequena gerada em código para o worker, bytes sintéticos para o multipart e limite reduzido por configuração para a regra de 10GB. Nenhum binário é versionado e nada chega perto de 10GB na suíte. O FFmpeg já é dependência da imagem do worker (TD-05), e manter a matriz de formatos em código evita fixtures opacas. A Option C pode existir como script manual de smoke test (fora da suíte e da CI) para validar o tamanho real antes de produção. Se instalar FFmpeg no runtime de testes da API for inaceitável, a Option A é o fallback razoável.
 **Libraries:** —
