@@ -133,7 +133,9 @@ describe('VideosService (integration)', () => {
       { part_numbers: [1] },
     );
 
-    expect(parts).toEqual([{ part_number: 1, url: expect.any(String) }]);
+    expect(parts).toEqual([
+      { part_number: 1, url: expect.any(String) as string },
+    ]);
     expect(new Date(expires_at).getTime()).toBeGreaterThan(Date.now());
 
     const partBytes = buildSyntheticPart(1, 5 * 1024 * 1024);

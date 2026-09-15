@@ -2,6 +2,10 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { buildSyntheticPart } from '../../src/test/synthetic-bytes';
+import type {
+  CreatePartUrlsResult,
+  InitiateUploadResult,
+} from '../../src/videos/videos.service';
 
 export async function createDraft(
   app: INestApplication<App>,
@@ -16,7 +20,7 @@ export async function createDraft(
       content_type: 'video/mp4',
       size_bytes: sizeBytes,
     });
-  return res.body.public_id as string;
+  return (res.body as InitiateUploadResult).public_id;
 }
 
 export async function uploadParts(
@@ -33,7 +37,7 @@ export async function uploadParts(
     .expect(200);
 
   const parts: { part_number: number; etag: string }[] = [];
-  for (const part of partUrlsRes.body.parts) {
+  for (const part of (partUrlsRes.body as CreatePartUrlsResult).parts) {
     const size = sizes[part.part_number - 1];
     const putResponse = await fetch(part.url, {
       method: 'PUT',

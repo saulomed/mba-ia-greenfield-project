@@ -5,9 +5,13 @@ import { App } from 'supertest/types';
 import { DataSource, Repository } from 'typeorm';
 import { ThrottlerStorageService } from '@nestjs/throttler';
 import { StorageService } from '../src/storage/storage.service';
+import type { ApiErrorEnvelope } from '../src/common/openapi/api-error-envelope.dto';
 import { getVideoFixture } from '../src/test/video-fixtures';
 import { cleanAllTables } from '../src/test/create-test-data-source';
 import { Video, VideoStatus } from '../src/videos/entities/video.entity';
+import type { VideoDownloadResponseDto } from '../src/videos/dto/video-download-response.dto';
+import type { VideoStreamResponseDto } from '../src/videos/dto/video-stream-response.dto';
+import type { InitiateUploadResult } from '../src/videos/videos.service';
 import { bootstrapE2eApp } from './support/app-test-helpers';
 import { registerConfirmAndLogin } from './support/auth-test-helpers';
 
@@ -45,7 +49,7 @@ describe('Video stream and download endpoints (e2e)', () => {
         content_type: 'video/mp4',
         size_bytes: 6291456,
       });
-    const publicId: string = initiateRes.body.public_id;
+    const publicId = (initiateRes.body as InitiateUploadResult).public_id;
 
     await videoRepository.update({ public_id: publicId }, overrides);
 
@@ -86,12 +90,16 @@ describe('Video stream and download endpoints (e2e)', () => {
         .set('Authorization', `Bearer ${access_token}`)
         .expect(200);
 
-      expect(typeof res.body.url).toBe('string');
-      expect(res.body.url.length).toBeGreaterThan(0);
-      expect(res.body.content_type).toBe('video/mp4');
-      expect(new Date(res.body.expires_at).getTime()).toBeGreaterThan(
-        Date.now(),
+      expect(typeof (res.body as VideoStreamResponseDto).url).toBe('string');
+      expect((res.body as VideoStreamResponseDto).url.length).toBeGreaterThan(
+        0,
       );
+      expect((res.body as VideoStreamResponseDto).content_type).toBe(
+        'video/mp4',
+      );
+      expect(
+        new Date((res.body as VideoStreamResponseDto).expires_at).getTime(),
+      ).toBeGreaterThan(Date.now());
     });
 
     it('serves Range requests directly from storage', async () => {
@@ -106,9 +114,12 @@ describe('Video stream and download endpoints (e2e)', () => {
         .set('Authorization', `Bearer ${access_token}`)
         .expect(200);
 
-      const rangeRes = await fetch(streamRes.body.url, {
-        headers: { Range: 'bytes=0-1023' },
-      });
+      const rangeRes = await fetch(
+        (streamRes.body as VideoStreamResponseDto).url,
+        {
+          headers: { Range: 'bytes=0-1023' },
+        },
+      );
       expect(rangeRes.status).toBe(206);
       const body = await rangeRes.arrayBuffer();
       expect(body.byteLength).toBe(1024);
@@ -129,14 +140,20 @@ describe('Video stream and download endpoints (e2e)', () => {
         .set('Authorization', `Bearer ${access_token}`)
         .expect(200);
 
-      expect(typeof res.body.url).toBe('string');
-      expect(res.body.url.length).toBeGreaterThan(0);
-      expect(res.body.filename).toBe('Minhas Férias.mp4');
-      expect(new Date(res.body.expires_at).getTime()).toBeGreaterThan(
-        Date.now(),
+      expect(typeof (res.body as VideoDownloadResponseDto).url).toBe('string');
+      expect((res.body as VideoDownloadResponseDto).url.length).toBeGreaterThan(
+        0,
       );
+      expect((res.body as VideoDownloadResponseDto).filename).toBe(
+        'Minhas Férias.mp4',
+      );
+      expect(
+        new Date((res.body as VideoDownloadResponseDto).expires_at).getTime(),
+      ).toBeGreaterThan(Date.now());
 
-      const downloadRes = await fetch(res.body.url);
+      const downloadRes = await fetch(
+        (res.body as VideoDownloadResponseDto).url,
+      );
       expect(downloadRes.status).toBe(200);
       const disposition = downloadRes.headers.get('content-disposition');
       expect(disposition).toMatch(/^attachment/);
@@ -165,13 +182,17 @@ describe('Video stream and download endpoints (e2e)', () => {
           .get(`/videos/${publicId}/stream`)
           .set('Authorization', `Bearer ${access_token}`)
           .expect(409);
-        expect(streamRes.body.error).toBe('VIDEO_NOT_READY');
+        expect((streamRes.body as ApiErrorEnvelope).error).toBe(
+          'VIDEO_NOT_READY',
+        );
 
         const downloadRes = await request(app.getHttpServer())
           .get(`/videos/${publicId}/download`)
           .set('Authorization', `Bearer ${access_token}`)
           .expect(409);
-        expect(downloadRes.body.error).toBe('VIDEO_NOT_READY');
+        expect((downloadRes.body as ApiErrorEnvelope).error).toBe(
+          'VIDEO_NOT_READY',
+        );
       }
     });
 
@@ -190,13 +211,17 @@ describe('Video stream and download endpoints (e2e)', () => {
         .get(`/videos/${publicId}/stream`)
         .set('Authorization', `Bearer ${otherToken}`)
         .expect(404);
-      expect(streamNonOwnerRes.body.error).toBe('VIDEO_NOT_FOUND');
+      expect((streamNonOwnerRes.body as ApiErrorEnvelope).error).toBe(
+        'VIDEO_NOT_FOUND',
+      );
 
       const downloadNonOwnerRes = await request(app.getHttpServer())
         .get(`/videos/${publicId}/download`)
         .set('Authorization', `Bearer ${otherToken}`)
         .expect(404);
-      expect(downloadNonOwnerRes.body.error).toBe('VIDEO_NOT_FOUND');
+      expect((downloadNonOwnerRes.body as ApiErrorEnvelope).error).toBe(
+        'VIDEO_NOT_FOUND',
+      );
 
       const streamUnknownRes = await request(app.getHttpServer())
         .get('/videos/AAAAAAAAAAA/stream')
@@ -267,7 +292,7 @@ describe('Video stream and download endpoints (e2e)', () => {
           content_type: 'video/mp4',
           size_bytes: 6291456,
         });
-      const publicId: string = initiateRes.body.public_id;
+      const publicId = (initiateRes.body as InitiateUploadResult).public_id;
       const playbackKey = `videos/${publicId}/playback.mp4`;
       await shortTtlVideoRepository.update(
         { public_id: publicId },
@@ -287,7 +312,9 @@ describe('Video stream and download endpoints (e2e)', () => {
         .set('Authorization', `Bearer ${access_token}`)
         .expect(200);
 
-      const expiresAt = new Date(res.body.expires_at).getTime();
+      const expiresAt = new Date(
+        (res.body as VideoStreamResponseDto).expires_at,
+      ).getTime();
       expect(expiresAt).toBeLessThanOrEqual(Date.now() + 2000);
 
       const deadline = Date.now() + 5000;
@@ -295,7 +322,7 @@ describe('Video stream and download endpoints (e2e)', () => {
         await sleep(100);
       }
 
-      const expiredRes = await fetch(res.body.url);
+      const expiredRes = await fetch((res.body as VideoStreamResponseDto).url);
       expect(expiredRes.status).toBe(403);
     }, 15000);
   });

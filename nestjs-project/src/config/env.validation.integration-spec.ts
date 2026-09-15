@@ -10,11 +10,16 @@ const requiredEnv = {
   STORAGE_SECRET_KEY: 'secret-key',
 };
 
-const validate = (env: Record<string, string>) =>
-  envValidationSchema.validate(
+const validate = (env: Record<string, string>) => {
+  const result = envValidationSchema.validate(
     { ...requiredEnv, ...env },
     { allowUnknown: true, abortEarly: false },
   );
+  return {
+    error: result.error,
+    value: result.value as Record<string, unknown>,
+  };
+};
 
 describe('envValidationSchema — SWAGGER_ENABLED', () => {
   it('should reject SWAGGER_ENABLED with an invalid value', () => {
@@ -42,7 +47,8 @@ describe('envValidationSchema — SWAGGER_ENABLED', () => {
 
 describe('envValidationSchema — storage credentials', () => {
   it('should reject bootstrap without STORAGE_ACCESS_KEY', () => {
-    const { STORAGE_ACCESS_KEY: _omitted, ...env } = requiredEnv;
+    const env: Partial<typeof requiredEnv> = { ...requiredEnv };
+    delete env.STORAGE_ACCESS_KEY;
     const { error } = envValidationSchema.validate(env, {
       allowUnknown: true,
       abortEarly: false,
@@ -52,7 +58,8 @@ describe('envValidationSchema — storage credentials', () => {
   });
 
   it('should reject bootstrap without STORAGE_SECRET_KEY', () => {
-    const { STORAGE_SECRET_KEY: _omitted, ...env } = requiredEnv;
+    const env: Partial<typeof requiredEnv> = { ...requiredEnv };
+    delete env.STORAGE_SECRET_KEY;
     const { error } = envValidationSchema.validate(env, {
       allowUnknown: true,
       abortEarly: false,

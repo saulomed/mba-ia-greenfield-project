@@ -1,6 +1,9 @@
 import { readdir } from 'node:fs/promises';
 import * as os from 'node:os';
 import type { Job } from 'bullmq';
+import type { Repository } from 'typeorm';
+import type { MediaService } from '../media/media.service';
+import type { StorageService } from '../storage/storage.service';
 import { Video, VideoStatus } from '../videos/entities/video.entity';
 import { VideoProcessingConsumer } from './video-processing.consumer';
 
@@ -26,16 +29,27 @@ function makeJob(overrides: Partial<Job> = {}): Job<{ videoId: string }> {
   } as unknown as Job<{ videoId: string }>;
 }
 
+function makeConsumerWithRepository(
+  findOneBy: jest.Mock,
+  update: jest.Mock,
+): VideoProcessingConsumer {
+  return new VideoProcessingConsumer(
+    { findOneBy, update } as unknown as Repository<Video>,
+    {} as StorageService,
+    {} as MediaService,
+  );
+}
+
 describe('VideoProcessingConsumer', () => {
   describe('process — temporary directory cleanup', () => {
     it('removes the temporary directory even when normalize fails', async () => {
       const videoRepository = {
         findOneBy: jest.fn().mockResolvedValue(makeVideo()),
         update: jest.fn().mockResolvedValue(undefined),
-      } as any;
+      } as unknown as Repository<Video>;
       const storageService = {
         downloadToFile: jest.fn().mockResolvedValue(undefined),
-      } as any;
+      } as unknown as StorageService;
       const mediaService = {
         probe: jest.fn().mockResolvedValue({
           duration_seconds: 2,
@@ -46,7 +60,7 @@ describe('VideoProcessingConsumer', () => {
         }),
         normalize: jest.fn().mockRejectedValue(new Error('ffmpeg boom')),
         extractThumbnail: jest.fn(),
-      } as any;
+      } as unknown as MediaService;
       const consumer = new VideoProcessingConsumer(
         videoRepository,
         storageService,
@@ -64,36 +78,24 @@ describe('VideoProcessingConsumer', () => {
 
   describe('onFailed', () => {
     it('does not mark the video when the attempt is not the last one', async () => {
-      const videoRepository = {
-        findOneBy: jest.fn(),
-        update: jest.fn(),
-      } as any;
-      const consumer = new VideoProcessingConsumer(
-        videoRepository,
-        {} as any,
-        {} as any,
-      );
+      const findOneBy = jest.fn();
+      const update = jest.fn();
+      const consumer = makeConsumerWithRepository(findOneBy, update);
 
       await consumer.onFailed(makeJob({ attemptsMade: 1 }));
 
-      expect(videoRepository.findOneBy).not.toHaveBeenCalled();
-      expect(videoRepository.update).not.toHaveBeenCalled();
+      expect(findOneBy).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
     });
 
     it('marks status failed with PROCESSING_ERROR on the last attempt', async () => {
-      const videoRepository = {
-        findOneBy: jest.fn().mockResolvedValue(makeVideo()),
-        update: jest.fn().mockResolvedValue(undefined),
-      } as any;
-      const consumer = new VideoProcessingConsumer(
-        videoRepository,
-        {} as any,
-        {} as any,
-      );
+      const findOneBy = jest.fn().mockResolvedValue(makeVideo());
+      const update = jest.fn().mockResolvedValue(undefined);
+      const consumer = makeConsumerWithRepository(findOneBy, update);
 
       await consumer.onFailed(makeJob({ attemptsMade: 3 }));
 
-      expect(videoRepository.update).toHaveBeenCalledWith(
+      expect(update).toHaveBeenCalledWith(
         { id: 'video-1' },
         expect.objectContaining({
           status: VideoStatus.FAILED,
@@ -103,21 +105,15 @@ describe('VideoProcessingConsumer', () => {
     });
 
     it('does not mark the video again when it is already failed', async () => {
-      const videoRepository = {
-        findOneBy: jest
-          .fn()
-          .mockResolvedValue(makeVideo({ status: VideoStatus.FAILED })),
-        update: jest.fn(),
-      } as any;
-      const consumer = new VideoProcessingConsumer(
-        videoRepository,
-        {} as any,
-        {} as any,
-      );
+      const findOneBy = jest
+        .fn()
+        .mockResolvedValue(makeVideo({ status: VideoStatus.FAILED }));
+      const update = jest.fn();
+      const consumer = makeConsumerWithRepository(findOneBy, update);
 
       await consumer.onFailed(makeJob({ attemptsMade: 3 }));
 
-      expect(videoRepository.update).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
     });
   });
 });

@@ -9,9 +9,12 @@ import { DataSource, Repository } from 'typeorm';
 import { ThrottlerStorageService } from '@nestjs/throttler';
 import { MediaService } from '../src/media/media.service';
 import { StorageService } from '../src/storage/storage.service';
+import type { ApiErrorEnvelope } from '../src/common/openapi/api-error-envelope.dto';
 import { getVideoFixture } from '../src/test/video-fixtures';
 import { cleanAllTables } from '../src/test/create-test-data-source';
 import { Video, VideoStatus } from '../src/videos/entities/video.entity';
+import type { VideoResponseDto } from '../src/videos/dto/video-response.dto';
+import type { InitiateUploadResult } from '../src/videos/videos.service';
 import { bootstrapE2eApp } from './support/app-test-helpers';
 import { registerConfirmAndLogin } from './support/auth-test-helpers';
 
@@ -54,7 +57,7 @@ describe('Video detail endpoint (e2e)', () => {
         content_type: 'video/mp4',
         size_bytes: 6291456,
       });
-    const publicId: string = initiateRes.body.public_id;
+    const publicId = (initiateRes.body as InitiateUploadResult).public_id;
 
     await videoRepository.update({ public_id: publicId }, overrides);
 
@@ -105,8 +108,10 @@ describe('Video detail endpoint (e2e)', () => {
         mime_type: 'video/mp4',
         size_bytes: 6291456,
       });
-      expect(typeof res.body.created_at).toBe('string');
-      expect(new Date(res.body.created_at).toString()).not.toBe('Invalid Date');
+      expect(typeof (res.body as VideoResponseDto).created_at).toBe('string');
+      expect(
+        new Date((res.body as VideoResponseDto).created_at).toString(),
+      ).not.toBe('Invalid Date');
       expect(res.body).not.toHaveProperty('id');
       expect(res.body).not.toHaveProperty('channel_id');
       expect(res.body).not.toHaveProperty('upload_id');
@@ -145,17 +150,19 @@ describe('Video detail endpoint (e2e)', () => {
         video_codec: 'h264',
         audio_codec: 'aac',
       });
-      expect(typeof res.body.processed_at).toBe('string');
-      expect(new Date(res.body.processed_at).toString()).not.toBe(
-        'Invalid Date',
-      );
+      expect(typeof (res.body as VideoResponseDto).processed_at).toBe('string');
+      expect(
+        new Date((res.body as VideoResponseDto).processed_at!).toString(),
+      ).not.toBe('Invalid Date');
       expect(res.body).not.toHaveProperty('id');
       expect(res.body).not.toHaveProperty('channel_id');
       expect(res.body).not.toHaveProperty('upload_id');
       expect(res.body).not.toHaveProperty('original_key');
       expect(res.body).not.toHaveProperty('playback_key');
 
-      const thumbnailRes = await fetch(res.body.thumbnail_url);
+      const thumbnailRes = await fetch(
+        (res.body as VideoResponseDto).thumbnail_url!,
+      );
       expect(thumbnailRes.status).toBe(200);
       expect(thumbnailRes.headers.get('content-type')).toBe('image/jpeg');
     });
@@ -176,9 +183,11 @@ describe('Video detail endpoint (e2e)', () => {
         .set('Authorization', `Bearer ${access_token}`)
         .expect(200);
 
-      expect(res.body.status).toBe('failed');
-      expect(res.body.failure_reason).toBe('INVALID_MEDIA');
-      expect(res.body.thumbnail_url).toBeNull();
+      expect((res.body as VideoResponseDto).status).toBe('failed');
+      expect((res.body as VideoResponseDto).failure_reason).toBe(
+        'INVALID_MEDIA',
+      );
+      expect((res.body as VideoResponseDto).thumbnail_url).toBeNull();
     });
 
     it('returns the same 404 for a non-owner and for an unknown public_id', async () => {
@@ -196,8 +205,12 @@ describe('Video detail endpoint (e2e)', () => {
         .get(`/videos/${publicId}`)
         .set('Authorization', `Bearer ${otherToken}`)
         .expect(404);
-      expect(nonOwnerRes.body.error).toBe('VIDEO_NOT_FOUND');
-      expect(nonOwnerRes.body.message).toBe('Video not found');
+      expect((nonOwnerRes.body as ApiErrorEnvelope).error).toBe(
+        'VIDEO_NOT_FOUND',
+      );
+      expect((nonOwnerRes.body as ApiErrorEnvelope).message).toBe(
+        'Video not found',
+      );
 
       const unknownRes = await request(app.getHttpServer())
         .get('/videos/AAAAAAAAAAA')

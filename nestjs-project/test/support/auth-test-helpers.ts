@@ -1,20 +1,25 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { AuthService } from '../../src/auth/auth.service';
+import { MailService } from '../../src/mail/mail.service';
+
+export interface AuthTokens {
+  access_token: string;
+  refresh_token: string;
+}
 
 export async function captureConfirmationToken(
   app: INestApplication<App>,
   email: string,
   password = 'password123',
 ): Promise<string> {
-  const authService = app.get(AuthService);
-  const mailServiceInstance = (authService as any).mailService;
+  const mailService = app.get(MailService);
   let capturedToken = '';
   jest
-    .spyOn(mailServiceInstance, 'sendConfirmationEmail')
-    .mockImplementationOnce(async (_e: string, _n: string, t: string) => {
+    .spyOn(mailService, 'sendConfirmationEmail')
+    .mockImplementationOnce((_e: string, _n: string, t: string) => {
       capturedToken = t;
+      return Promise.resolve();
     });
   await request(app.getHttpServer())
     .post('/auth/register')
@@ -26,7 +31,7 @@ export async function registerConfirmAndLogin(
   app: INestApplication<App>,
   email: string,
   password = 'password123',
-): Promise<{ access_token: string; refresh_token: string }> {
+): Promise<AuthTokens> {
   const token = await captureConfirmationToken(app, email, password);
   await request(app.getHttpServer())
     .get('/auth/confirm-email')
@@ -34,8 +39,6 @@ export async function registerConfirmAndLogin(
   const res = await request(app.getHttpServer())
     .post('/auth/login')
     .send({ email, password });
-  return {
-    access_token: res.body.access_token,
-    refresh_token: res.body.refresh_token,
-  };
+  const { access_token, refresh_token } = res.body as AuthTokens;
+  return { access_token, refresh_token };
 }

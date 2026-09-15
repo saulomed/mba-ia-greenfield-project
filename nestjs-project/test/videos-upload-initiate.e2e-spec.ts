@@ -7,7 +7,9 @@ import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
 import { AppModule } from '../src/app.module';
 import { DomainExceptionFilter } from '../src/common/filters/domain-exception.filter';
 import { ValidationExceptionFilter } from '../src/common/filters/validation-exception.filter';
+import type { ApiErrorEnvelope } from '../src/common/openapi/api-error-envelope.dto';
 import { Video } from '../src/videos/entities/video.entity';
+import type { InitiateUploadResult } from '../src/videos/videos.service';
 import { cleanAllTables } from '../src/test/create-test-data-source';
 import { registerConfirmAndLogin } from './support/auth-test-helpers';
 
@@ -68,14 +70,16 @@ describe('POST /videos (e2e)', () => {
         })
         .expect(201);
 
-      expect(res.body.public_id).toMatch(/^[0-9A-Za-z]{11}$/);
-      expect(res.body.title).toBe('Minhas Férias');
-      expect(res.body.status).toBe('uploading');
-      expect(res.body.part_size_bytes).toBe(5242880);
-      expect(res.body.part_count).toBe(2);
+      expect((res.body as InitiateUploadResult).public_id).toMatch(
+        /^[0-9A-Za-z]{11}$/,
+      );
+      expect((res.body as InitiateUploadResult).title).toBe('Minhas Férias');
+      expect((res.body as InitiateUploadResult).status).toBe('uploading');
+      expect((res.body as InitiateUploadResult).part_size_bytes).toBe(5242880);
+      expect((res.body as InitiateUploadResult).part_count).toBe(2);
 
       const persisted = await videoRepository.findOneBy({
-        public_id: res.body.public_id,
+        public_id: (res.body as InitiateUploadResult).public_id,
       });
       expect(persisted).not.toBeNull();
       expect(persisted!.status).toBe('uploading');
@@ -84,7 +88,7 @@ describe('POST /videos (e2e)', () => {
       expect(persisted!.mime_type).toBe('video/quicktime');
       expect(Number(persisted!.size_bytes)).toBe(6291456);
       expect(persisted!.original_key).toBe(
-        `videos/${res.body.public_id}/original`,
+        `videos/${(res.body as InitiateUploadResult).public_id}/original`,
       );
     });
 
@@ -130,8 +134,8 @@ describe('POST /videos (e2e)', () => {
         })
         .expect(201);
 
-      expect(res.body.part_size_bytes).toBe(5242880);
-      expect(res.body.part_count).toBe(3);
+      expect((res.body as InitiateUploadResult).part_size_bytes).toBe(5242880);
+      expect((res.body as InitiateUploadResult).part_count).toBe(3);
     });
 
     it('rejects a non-video content_type with 400', async () => {
@@ -150,7 +154,7 @@ describe('POST /videos (e2e)', () => {
         })
         .expect(400);
 
-      expect(res.body.error).toBe('VALIDATION_ERROR');
+      expect((res.body as ApiErrorEnvelope).error).toBe('VALIDATION_ERROR');
 
       const count = await videoRepository.count();
       expect(count).toBe(0);

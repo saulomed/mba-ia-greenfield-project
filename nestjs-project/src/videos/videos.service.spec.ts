@@ -1,8 +1,13 @@
-import { QueryFailedError } from 'typeorm';
+import type { ConfigType } from '@nestjs/config';
+import { QueryFailedError, type Repository } from 'typeorm';
+import type { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/entities/channel.entity';
+import type videoConfig from '../config/video.config';
 import { StorageInvalidPartsException } from '../storage/storage.exceptions';
+import type { StorageService } from '../storage/storage.service';
 import { deriveTitle, computePartPlan, VideosService } from './videos.service';
 import { Video, VideoStatus } from './entities/video.entity';
+import type { VideoProcessingProducer } from './video-processing.producer';
 import {
   InvalidPartNumbersException,
   InvalidUploadPartsException,
@@ -12,6 +17,27 @@ import {
   VideoTooLargeException,
   VideoUploadNotInProgressException,
 } from './video.exceptions';
+
+type MockObject = Record<string, jest.Mock>;
+
+interface VideosServiceDeps {
+  videoRepository?: MockObject;
+  channelsService?: MockObject;
+  storageService?: MockObject;
+  config?: Partial<ConfigType<typeof videoConfig>>;
+  videoProcessingProducer?: MockObject;
+}
+
+function makeService(deps: VideosServiceDeps = {}): VideosService {
+  return new VideosService(
+    (deps.videoRepository ??
+      makeVideoRepository()) as unknown as Repository<Video>,
+    (deps.channelsService ?? {}) as unknown as ChannelsService,
+    (deps.storageService ?? {}) as unknown as StorageService,
+    (deps.config ?? {}) as ConfigType<typeof videoConfig>,
+    (deps.videoProcessingProducer ?? {}) as unknown as VideoProcessingProducer,
+  );
+}
 
 function makeUniqueError(): QueryFailedError {
   const driverError = {
@@ -33,9 +59,9 @@ function makeChannel(): Channel {
   return c;
 }
 
-function makeVideoRepository(overrides: Record<string, jest.Mock> = {}): any {
+function makeVideoRepository(overrides: MockObject = {}): MockObject {
   return {
-    create: jest.fn((data) => data),
+    create: jest.fn((data: Partial<Video>) => data),
     save: jest.fn(),
     findOne: jest.fn(),
     ...overrides,
@@ -112,16 +138,13 @@ describe('VideosService.initiateUpload', () => {
   };
 
   it('throws VideoTooLargeException without calling storage', async () => {
-    const storageService = { createMultipartUpload: jest.fn() } as any;
-    const channelsService = { findByUserId: jest.fn() } as any;
-    const videoRepository = makeVideoRepository();
-    const service = new VideosService(
-      videoRepository,
+    const storageService = { createMultipartUpload: jest.fn() };
+    const channelsService = { findByUserId: jest.fn() };
+    const service = makeService({
       channelsService,
       storageService,
-      { maxUploadBytes: 5000000 } as any,
-      {} as any,
-    );
+      config: { maxUploadBytes: 5000000 },
+    });
 
     await expect(
       service.initiateUpload('user-id', { ...dto, size_bytes: 5000001 }),
@@ -133,21 +156,20 @@ describe('VideosService.initiateUpload', () => {
     const channel = makeChannel();
     const storageService = {
       createMultipartUpload: jest.fn().mockResolvedValue('upload-id-1'),
-    } as any;
+    };
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
-      create: jest.fn((data) => data),
-      save: jest.fn(async (data) => data as Video),
+      create: jest.fn((data: Partial<Video>) => data),
+      save: jest.fn((data: Partial<Video>) => Promise.resolve(data as Video)),
     });
-    const service = new VideosService(
+    const service = makeService({
       videoRepository,
       channelsService,
       storageService,
-      { maxUploadBytes: 10737418240 } as any,
-      {} as any,
-    );
+      config: { maxUploadBytes: 10737418240 },
+    });
 
     const result = await service.initiateUpload('user-id', dto);
 
@@ -167,24 +189,25 @@ describe('VideosService.initiateUpload', () => {
     const storageService = {
       createMultipartUpload: jest.fn().mockResolvedValue('upload-id-1'),
       abortMultipartUpload: jest.fn().mockResolvedValue(undefined),
-    } as any;
+    };
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
-      create: jest.fn((data) => data),
+      create: jest.fn((data: Partial<Video>) => data),
       save: jest
         .fn()
         .mockRejectedValueOnce(makeUniqueError())
-        .mockImplementationOnce(async (data) => data as Video),
+        .mockImplementationOnce((data: Partial<Video>) =>
+          Promise.resolve(data as Video),
+        ),
     });
-    const service = new VideosService(
+    const service = makeService({
       videoRepository,
       channelsService,
       storageService,
-      { maxUploadBytes: 10737418240 } as any,
-      {} as any,
-    );
+      config: { maxUploadBytes: 10737418240 },
+    });
 
     const result = await service.initiateUpload('user-id', dto);
 
@@ -200,17 +223,11 @@ describe('VideosService.findOwnedByPublicId', () => {
     const channel = makeChannel();
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
       findOne: jest.fn().mockResolvedValue(null),
     });
-    const service = new VideosService(
-      videoRepository,
-      channelsService,
-      {} as any,
-      {} as any,
-      {} as any,
-    );
+    const service = makeService({ videoRepository, channelsService });
 
     await expect(
       service.findOwnedByPublicId('user-id', 'someone-elses'),
@@ -227,17 +244,15 @@ describe('VideosService.createPartUrls', () => {
     const video = makeVideo({ status: VideoStatus.PROCESSING });
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
       findOne: jest.fn().mockResolvedValue(video),
     });
-    const service = new VideosService(
+    const service = makeService({
       videoRepository,
       channelsService,
-      {} as any,
-      { uploadPartUrlTtlSeconds: 3600 } as any,
-      {} as any,
-    );
+      config: { uploadPartUrlTtlSeconds: 3600 },
+    });
 
     await expect(
       service.createPartUrls('user-id', video.public_id, {
@@ -251,17 +266,15 @@ describe('VideosService.createPartUrls', () => {
     const video = makeVideo({ size_bytes: 6291456 }); // part_count = 2
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
       findOne: jest.fn().mockResolvedValue(video),
     });
-    const service = new VideosService(
+    const service = makeService({
       videoRepository,
       channelsService,
-      {} as any,
-      { uploadPartUrlTtlSeconds: 3600 } as any,
-      {} as any,
-    );
+      config: { uploadPartUrlTtlSeconds: 3600 },
+    });
 
     await expect(
       service.createPartUrls('user-id', video.public_id, {
@@ -275,7 +288,7 @@ describe('VideosService.createPartUrls', () => {
     const video = makeVideo({ size_bytes: 6291456 }); // part_count = 2
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
       findOne: jest.fn().mockResolvedValue(video),
     });
@@ -283,18 +296,17 @@ describe('VideosService.createPartUrls', () => {
       presignUploadPart: jest
         .fn()
         .mockImplementation(
-          async (_key: string, _uploadId: string, partNumber: number) =>
-            `https://storage.example/part-${partNumber}`,
+          (_key: string, _uploadId: string, partNumber: number) =>
+            Promise.resolve(`https://storage.example/part-${partNumber}`),
         ),
-    } as any;
+    };
     const ttlSeconds = 3600;
-    const service = new VideosService(
+    const service = makeService({
       videoRepository,
       channelsService,
       storageService,
-      { uploadPartUrlTtlSeconds: ttlSeconds } as any,
-      {} as any,
-    );
+      config: { uploadPartUrlTtlSeconds: ttlSeconds },
+    });
 
     const before = Date.now();
     const result = await service.createPartUrls('user-id', video.public_id, {
@@ -324,17 +336,11 @@ describe('VideosService.listUploadedParts', () => {
     const video = makeVideo({ status: VideoStatus.READY });
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
       findOne: jest.fn().mockResolvedValue(video),
     });
-    const service = new VideosService(
-      videoRepository,
-      channelsService,
-      {} as any,
-      {} as any,
-      {} as any,
-    );
+    const service = makeService({ videoRepository, channelsService });
 
     await expect(
       service.listUploadedParts('user-id', video.public_id),
@@ -346,7 +352,7 @@ describe('VideosService.listUploadedParts', () => {
     const video = makeVideo();
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
       findOne: jest.fn().mockResolvedValue(video),
     });
@@ -354,14 +360,12 @@ describe('VideosService.listUploadedParts', () => {
       listParts: jest
         .fn()
         .mockResolvedValue([{ partNumber: 1, etag: '"abc"', size: 5242880 }]),
-    } as any;
-    const service = new VideosService(
+    };
+    const service = makeService({
       videoRepository,
       channelsService,
       storageService,
-      {} as any,
-      {} as any,
-    );
+    });
 
     const result = await service.listUploadedParts('user-id', video.public_id);
 
@@ -381,18 +385,16 @@ describe('VideosService.getOwnedVideo', () => {
     const video = makeVideo({ thumbnail_key: null });
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
       findOne: jest.fn().mockResolvedValue(video),
     });
-    const storageService = { getPublicUrl: jest.fn() } as any;
-    const service = new VideosService(
+    const storageService = { getPublicUrl: jest.fn() };
+    const service = makeService({
       videoRepository,
       channelsService,
       storageService,
-      {} as any,
-      {} as any,
-    );
+    });
 
     const result = await service.getOwnedVideo('user-id', video.public_id);
 
@@ -413,7 +415,7 @@ describe('VideosService.getOwnedVideo', () => {
     });
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
       findOne: jest.fn().mockResolvedValue(video),
     });
@@ -423,14 +425,12 @@ describe('VideosService.getOwnedVideo', () => {
         .mockReturnValue(
           'http://storage.example/test-bucket/thumbnails/abc123.jpg',
         ),
-    } as any;
-    const service = new VideosService(
+    };
+    const service = makeService({
       videoRepository,
       channelsService,
       storageService,
-      {} as any,
-      {} as any,
-    );
+    });
 
     const result = await service.getOwnedVideo('user-id', video.public_id);
 
@@ -459,17 +459,15 @@ describe.each([['getStreamUrl' as const], ['getDownloadUrl' as const]])(
       const video = makeVideo({ status });
       const channelsService = {
         findByUserId: jest.fn().mockResolvedValue(channel),
-      } as any;
+      };
       const videoRepository = makeVideoRepository({
         findOne: jest.fn().mockResolvedValue(video),
       });
-      const service = new VideosService(
+      const service = makeService({
         videoRepository,
         channelsService,
-        {} as any,
-        { playbackUrlTtlSeconds: 900 } as any,
-        {} as any,
-      );
+        config: { playbackUrlTtlSeconds: 900 },
+      });
 
       await expect(service[method]('user-id', video.public_id)).rejects.toThrow(
         VideoNotReadyException,
@@ -487,7 +485,7 @@ describe('VideosService.getStreamUrl', () => {
     });
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
       findOne: jest.fn().mockResolvedValue(video),
     });
@@ -495,14 +493,13 @@ describe('VideosService.getStreamUrl', () => {
       presignGetObject: jest
         .fn()
         .mockResolvedValue('https://storage.example/signed-playback'),
-    } as any;
-    const service = new VideosService(
+    };
+    const service = makeService({
       videoRepository,
       channelsService,
       storageService,
-      { playbackUrlTtlSeconds: 900 } as any,
-      {} as any,
-    );
+      config: { playbackUrlTtlSeconds: 900 },
+    });
 
     const before = Date.now();
     const result = await service.getStreamUrl('user-id', video.public_id);
@@ -530,7 +527,7 @@ describe('VideosService.getDownloadUrl', () => {
     });
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
       findOne: jest.fn().mockResolvedValue(video),
     });
@@ -538,14 +535,13 @@ describe('VideosService.getDownloadUrl', () => {
       presignGetObject: jest
         .fn()
         .mockResolvedValue('https://storage.example/signed-download'),
-    } as any;
-    const service = new VideosService(
+    };
+    const service = makeService({
       videoRepository,
       channelsService,
       storageService,
-      { playbackUrlTtlSeconds: 900 } as any,
-      {} as any,
-    );
+      config: { playbackUrlTtlSeconds: 900 },
+    });
 
     const result = await service.getDownloadUrl('user-id', video.public_id);
 
@@ -575,7 +571,7 @@ describe('VideosService.completeUpload', () => {
     const video = makeVideo({ status: VideoStatus.PROCESSING });
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
       findOne: jest.fn().mockResolvedValue(video),
     });
@@ -583,15 +579,15 @@ describe('VideosService.completeUpload', () => {
       completeMultipartUpload: jest.fn(),
       headObject: jest.fn(),
       deleteObject: jest.fn(),
-    } as any;
-    const videoProcessingProducer = { enqueueProcessing: jest.fn() } as any;
-    const service = new VideosService(
+    };
+    const videoProcessingProducer = { enqueueProcessing: jest.fn() };
+    const service = makeService({
       videoRepository,
       channelsService,
       storageService,
-      { maxUploadBytes: 12582912 } as any,
+      config: { maxUploadBytes: 12582912 },
       videoProcessingProducer,
-    );
+    });
 
     await expect(
       service.completeUpload('user-id', video.public_id, dto),
@@ -605,7 +601,7 @@ describe('VideosService.completeUpload', () => {
     const video = makeVideo();
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
       findOne: jest.fn().mockResolvedValue(video),
       update: jest.fn(),
@@ -616,15 +612,15 @@ describe('VideosService.completeUpload', () => {
         .mockRejectedValue(new StorageInvalidPartsException()),
       headObject: jest.fn(),
       deleteObject: jest.fn(),
-    } as any;
-    const videoProcessingProducer = { enqueueProcessing: jest.fn() } as any;
-    const service = new VideosService(
+    };
+    const videoProcessingProducer = { enqueueProcessing: jest.fn() };
+    const service = makeService({
       videoRepository,
       channelsService,
       storageService,
-      { maxUploadBytes: 12582912 } as any,
+      config: { maxUploadBytes: 12582912 },
       videoProcessingProducer,
-    );
+    });
 
     await expect(
       service.completeUpload('user-id', video.public_id, dto),
@@ -646,7 +642,7 @@ describe('VideosService.completeUpload', () => {
     const video = makeVideo({ size_bytes: 20000000 });
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
       findOne: jest.fn().mockResolvedValue(video),
       delete: jest.fn(),
@@ -655,15 +651,15 @@ describe('VideosService.completeUpload', () => {
       completeMultipartUpload: jest.fn().mockResolvedValue(undefined),
       headObject: jest.fn().mockResolvedValue({ contentLength: 20000000 }),
       deleteObject: jest.fn().mockResolvedValue(undefined),
-    } as any;
-    const videoProcessingProducer = { enqueueProcessing: jest.fn() } as any;
-    const service = new VideosService(
+    };
+    const videoProcessingProducer = { enqueueProcessing: jest.fn() };
+    const service = makeService({
       videoRepository,
       channelsService,
       storageService,
-      { maxUploadBytes: 12582912 } as any,
+      config: { maxUploadBytes: 12582912 },
       videoProcessingProducer,
-    );
+    });
 
     await expect(
       service.completeUpload('user-id', video.public_id, dto),
@@ -680,7 +676,7 @@ describe('VideosService.completeUpload', () => {
     const video = makeVideo({ size_bytes: 6291456 });
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
       findOne: jest.fn().mockResolvedValue(video),
       delete: jest.fn(),
@@ -689,15 +685,15 @@ describe('VideosService.completeUpload', () => {
       completeMultipartUpload: jest.fn().mockResolvedValue(undefined),
       headObject: jest.fn().mockResolvedValue({ contentLength: 7340032 }),
       deleteObject: jest.fn().mockResolvedValue(undefined),
-    } as any;
-    const videoProcessingProducer = { enqueueProcessing: jest.fn() } as any;
-    const service = new VideosService(
+    };
+    const videoProcessingProducer = { enqueueProcessing: jest.fn() };
+    const service = makeService({
       videoRepository,
       channelsService,
       storageService,
-      { maxUploadBytes: 12582912 } as any,
+      config: { maxUploadBytes: 12582912 },
       videoProcessingProducer,
-    );
+    });
 
     await expect(
       service.completeUpload('user-id', video.public_id, dto),
@@ -714,7 +710,7 @@ describe('VideosService.completeUpload', () => {
     const video = makeVideo({ size_bytes: 6291456 });
     const channelsService = {
       findByUserId: jest.fn().mockResolvedValue(channel),
-    } as any;
+    };
     const videoRepository = makeVideoRepository({
       findOne: jest.fn().mockResolvedValue(video),
       update: jest.fn(),
@@ -723,17 +719,17 @@ describe('VideosService.completeUpload', () => {
       completeMultipartUpload: jest.fn().mockResolvedValue(undefined),
       headObject: jest.fn().mockResolvedValue({ contentLength: 6291456 }),
       deleteObject: jest.fn(),
-    } as any;
+    };
     const videoProcessingProducer = {
       enqueueProcessing: jest.fn().mockResolvedValue(undefined),
-    } as any;
-    const service = new VideosService(
+    };
+    const service = makeService({
       videoRepository,
       channelsService,
       storageService,
-      { maxUploadBytes: 12582912 } as any,
+      config: { maxUploadBytes: 12582912 },
       videoProcessingProducer,
-    );
+    });
 
     const result = await service.completeUpload(
       'user-id',
@@ -750,7 +746,7 @@ describe('VideosService.completeUpload', () => {
       expect.objectContaining({
         status: VideoStatus.PROCESSING,
         upload_id: null,
-        upload_completed_at: expect.any(Date),
+        upload_completed_at: expect.any(Date) as Date,
       }),
     );
     expect(videoProcessingProducer.enqueueProcessing).toHaveBeenCalledWith(

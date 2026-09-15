@@ -4,8 +4,14 @@ import { App } from 'supertest/types';
 import { DataSource, Repository } from 'typeorm';
 import { ThrottlerStorageService } from '@nestjs/throttler';
 import { buildSyntheticPart } from '../src/test/synthetic-bytes';
+import type { ApiErrorEnvelope } from '../src/common/openapi/api-error-envelope.dto';
 import { cleanAllTables } from '../src/test/create-test-data-source';
 import { Video, VideoStatus } from '../src/videos/entities/video.entity';
+import type {
+  CreatePartUrlsResult,
+  InitiateUploadResult,
+  ListUploadedPartsResult,
+} from '../src/videos/videos.service';
 import { bootstrapE2eApp } from './support/app-test-helpers';
 import { registerConfirmAndLogin } from './support/auth-test-helpers';
 
@@ -38,7 +44,7 @@ describe('Upload parts endpoints (e2e)', () => {
         content_type: 'video/mp4',
         size_bytes: 6291456,
       });
-    return res.body.public_id;
+    return (res.body as InitiateUploadResult).public_id;
   }
 
   describe('POST /videos/:publicId/upload/part-urls', () => {
@@ -56,12 +62,14 @@ describe('Upload parts endpoints (e2e)', () => {
         .send({ part_numbers: [1, 2] })
         .expect(200);
 
-      expect(res.body.parts).toEqual([
-        { part_number: 1, url: expect.any(String) },
-        { part_number: 2, url: expect.any(String) },
+      expect((res.body as CreatePartUrlsResult).parts).toEqual([
+        { part_number: 1, url: expect.any(String) as string },
+        { part_number: 2, url: expect.any(String) as string },
       ]);
-      expect(res.body.parts[0].url).not.toBe('');
-      expect(new Date(res.body.expires_at).getTime()).toBeGreaterThan(before);
+      expect((res.body as CreatePartUrlsResult).parts[0].url).not.toBe('');
+      expect(
+        new Date((res.body as CreatePartUrlsResult).expires_at).getTime(),
+      ).toBeGreaterThan(before);
     });
 
     it('accepts a part upload on the presigned URL', async () => {
@@ -77,10 +85,13 @@ describe('Upload parts endpoints (e2e)', () => {
         .send({ part_numbers: [1] })
         .expect(200);
 
-      const putResponse = await fetch(res.body.parts[0].url, {
-        method: 'PUT',
-        body: new Uint8Array(buildSyntheticPart(1, 5242880)),
-      });
+      const putResponse = await fetch(
+        (res.body as CreatePartUrlsResult).parts[0].url,
+        {
+          method: 'PUT',
+          body: new Uint8Array(buildSyntheticPart(1, 5242880)),
+        },
+      );
 
       expect(putResponse.status).toBe(200);
       expect(putResponse.headers.get('etag')).toBeTruthy();
@@ -100,7 +111,7 @@ describe('Upload parts endpoints (e2e)', () => {
         .send({ part_numbers: partNumbers })
         .expect(400);
 
-      expect(res.body.error).toBe('VALIDATION_ERROR');
+      expect((res.body as ApiErrorEnvelope).error).toBe('VALIDATION_ERROR');
     });
 
     it('rejects a part_number above part_count with 400', async () => {
@@ -116,7 +127,7 @@ describe('Upload parts endpoints (e2e)', () => {
         .send({ part_numbers: [3] })
         .expect(400);
 
-      expect(res.body.error).toBe('VALIDATION_ERROR');
+      expect((res.body as ApiErrorEnvelope).error).toBe('VALIDATION_ERROR');
     });
   });
 
@@ -134,10 +145,13 @@ describe('Upload parts endpoints (e2e)', () => {
         .send({ part_numbers: [1] })
         .expect(200);
 
-      const putResponse = await fetch(partUrlsRes.body.parts[0].url, {
-        method: 'PUT',
-        body: new Uint8Array(buildSyntheticPart(1, 5242880)),
-      });
+      const putResponse = await fetch(
+        (partUrlsRes.body as CreatePartUrlsResult).parts[0].url,
+        {
+          method: 'PUT',
+          body: new Uint8Array(buildSyntheticPart(1, 5242880)),
+        },
+      );
       const etag = putResponse.headers.get('etag');
 
       const res = await request(app.getHttpServer())
@@ -145,7 +159,7 @@ describe('Upload parts endpoints (e2e)', () => {
         .set('Authorization', `Bearer ${access_token}`)
         .expect(200);
 
-      expect(res.body.parts).toEqual([
+      expect((res.body as ListUploadedPartsResult).parts).toEqual([
         { part_number: 1, etag, size_bytes: 5242880 },
       ]);
     });
@@ -162,7 +176,7 @@ describe('Upload parts endpoints (e2e)', () => {
         .set('Authorization', `Bearer ${access_token}`)
         .expect(200);
 
-      expect(res.body.parts).toEqual([]);
+      expect((res.body as ListUploadedPartsResult).parts).toEqual([]);
     });
   });
 
@@ -183,13 +197,13 @@ describe('Upload parts endpoints (e2e)', () => {
         .set('Authorization', `Bearer ${otherToken}`)
         .send({ part_numbers: [1] })
         .expect(404);
-      expect(postRes.body.error).toBe('VIDEO_NOT_FOUND');
+      expect((postRes.body as ApiErrorEnvelope).error).toBe('VIDEO_NOT_FOUND');
 
       const getRes = await request(app.getHttpServer())
         .get(`/videos/${publicId}/upload/parts`)
         .set('Authorization', `Bearer ${otherToken}`)
         .expect(404);
-      expect(getRes.body.error).toBe('VIDEO_NOT_FOUND');
+      expect((getRes.body as ApiErrorEnvelope).error).toBe('VIDEO_NOT_FOUND');
     });
 
     it('returns the same 404 for an unknown public_id', async () => {
@@ -203,13 +217,13 @@ describe('Upload parts endpoints (e2e)', () => {
         .set('Authorization', `Bearer ${access_token}`)
         .send({ part_numbers: [1] })
         .expect(404);
-      expect(postRes.body.error).toBe('VIDEO_NOT_FOUND');
+      expect((postRes.body as ApiErrorEnvelope).error).toBe('VIDEO_NOT_FOUND');
 
       const getRes = await request(app.getHttpServer())
         .get('/videos/AAAAAAAAAAA/upload/parts')
         .set('Authorization', `Bearer ${access_token}`)
         .expect(404);
-      expect(getRes.body.error).toBe('VIDEO_NOT_FOUND');
+      expect((getRes.body as ApiErrorEnvelope).error).toBe('VIDEO_NOT_FOUND');
     });
 
     it('returns 409 VIDEO_UPLOAD_NOT_IN_PROGRESS on both routes for a processing video', async () => {
@@ -228,13 +242,17 @@ describe('Upload parts endpoints (e2e)', () => {
         .set('Authorization', `Bearer ${access_token}`)
         .send({ part_numbers: [1] })
         .expect(409);
-      expect(postRes.body.error).toBe('VIDEO_UPLOAD_NOT_IN_PROGRESS');
+      expect((postRes.body as ApiErrorEnvelope).error).toBe(
+        'VIDEO_UPLOAD_NOT_IN_PROGRESS',
+      );
 
       const getRes = await request(app.getHttpServer())
         .get(`/videos/${publicId}/upload/parts`)
         .set('Authorization', `Bearer ${access_token}`)
         .expect(409);
-      expect(getRes.body.error).toBe('VIDEO_UPLOAD_NOT_IN_PROGRESS');
+      expect((getRes.body as ApiErrorEnvelope).error).toBe(
+        'VIDEO_UPLOAD_NOT_IN_PROGRESS',
+      );
     });
 
     it('returns 401 for a missing access token on both routes', async () => {

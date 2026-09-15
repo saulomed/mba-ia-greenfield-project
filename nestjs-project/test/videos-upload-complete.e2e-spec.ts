@@ -6,8 +6,10 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource, Repository } from 'typeorm';
 import { cleanAllTables } from '../src/test/create-test-data-source';
+import type { ApiErrorEnvelope } from '../src/common/openapi/api-error-envelope.dto';
 import { Video, VideoStatus } from '../src/videos/entities/video.entity';
 import { VIDEO_QUEUES } from '../src/videos/videos.constants';
+import type { ProcessVideoJobData } from '../src/worker/video-processing.consumer';
 import { bootstrapE2eApp } from './support/app-test-helpers';
 import { registerConfirmAndLogin } from './support/auth-test-helpers';
 import { createDraft, uploadParts } from './support/video-upload-test-helpers';
@@ -17,7 +19,7 @@ describe('Video upload complete endpoint (e2e)', () => {
   let dataSource: DataSource;
   let throttlerStorage: ThrottlerStorageService;
   let videoRepository: Repository<Video>;
-  let queue: Queue;
+  let queue: Queue<ProcessVideoJobData>;
 
   beforeAll(async () => {
     ({ app, dataSource, throttlerStorage } = await bootstrapE2eApp());
@@ -99,7 +101,9 @@ describe('Video upload complete endpoint (e2e)', () => {
         .send({ parts })
         .expect(409);
 
-      expect(res.body.error).toBe('VIDEO_UPLOAD_NOT_IN_PROGRESS');
+      expect((res.body as ApiErrorEnvelope).error).toBe(
+        'VIDEO_UPLOAD_NOT_IN_PROGRESS',
+      );
 
       const jobs = await queue.getJobs(['waiting', 'paused', 'delayed']);
       const matchingJobs = jobs.filter((job) => job.data.videoId === video!.id);
@@ -129,7 +133,7 @@ describe('Video upload complete endpoint (e2e)', () => {
         .set('Authorization', `Bearer ${access_token}`)
         .send({ parts: brokenParts })
         .expect(400);
-      expect(res.body.error).toBe('INVALID_UPLOAD_PARTS');
+      expect((res.body as ApiErrorEnvelope).error).toBe('INVALID_UPLOAD_PARTS');
 
       const video = await videoRepository.findOneBy({ public_id: publicId });
       expect(video!.status).toBe(VideoStatus.UPLOADING);
@@ -160,7 +164,7 @@ describe('Video upload complete endpoint (e2e)', () => {
         .set('Authorization', `Bearer ${access_token}`)
         .send({ parts })
         .expect(422);
-      expect(res.body.error).toBe('UPLOAD_SIZE_MISMATCH');
+      expect((res.body as ApiErrorEnvelope).error).toBe('UPLOAD_SIZE_MISMATCH');
 
       const video = await videoRepository.findOneBy({ public_id: publicId });
       expect(video).toBeNull();
@@ -188,7 +192,7 @@ describe('Video upload complete endpoint (e2e)', () => {
         .set('Authorization', `Bearer ${otherToken}`)
         .send({ parts })
         .expect(404);
-      expect(res.body.error).toBe('VIDEO_NOT_FOUND');
+      expect((res.body as ApiErrorEnvelope).error).toBe('VIDEO_NOT_FOUND');
 
       const video = await videoRepository.findOneBy({ public_id: publicId });
       expect(video!.status).toBe(VideoStatus.UPLOADING);
@@ -207,7 +211,7 @@ describe('Video upload complete endpoint (e2e)', () => {
         .send({ parts: [] })
         .expect(400);
 
-      expect(res.body.error).toBe('VALIDATION_ERROR');
+      expect((res.body as ApiErrorEnvelope).error).toBe('VALIDATION_ERROR');
     });
 
     it('returns 401 for a missing access token', async () => {
