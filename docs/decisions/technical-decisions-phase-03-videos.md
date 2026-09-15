@@ -15,7 +15,7 @@ _Subprojects in scope:_
 
 > Âncoras entre documentos (já decididas — NÃO reabrir):
 > - **BFF estrito:** `next-frontend-config-base/TD-03` (Option A). O navegador só fala com `/api/...` do Next; a URL do backend nunca chega ao cliente. Essa TD já registra que payloads grandes (vídeos, Fase 03+) usarão **URLs pré-assinadas do object storage**, não a URL do backend. Isso restringe TD-01 e TD-09.
-> - **Auth:** guards customizados com `@nestjs/jwt` (`phase-02-auth/TD-02`). Endpoints de upload exigem usuário autenticado. Na Fase 03, streaming e download ficam restritos ao dono do canal (clarificações AMB-1 e AMB-2 em `docs/phases/phase-03-upload-processing/validation.md`); o acesso anônimo previsto na visão geral do projeto chega na Fase 05, junto com as regras de visibilidade da Fase 04.
+> - **Auth:** guards customizados com `@nestjs/jwt` (`phase-02-auth/TD-02`). Endpoints de upload exigem usuário autenticado. Na Fase 03, streaming e download ficam restritos ao dono do canal (clarificações AMB-1 e AMB-2 em `docs/phases/phase-03-videos/validation.md`); o acesso anônimo previsto na visão geral do projeto chega na Fase 05, junto com as regras de visibilidade da Fase 04.
 > - **Envelope de erro:** `{ statusCode, error, message }` com códigos de domínio (`phase-02-auth/TD-07`). Novos erros (ex.: `VIDEO_TOO_LARGE`, `UPLOAD_NOT_FOUND`) seguem esse formato.
 > - **Config:** um `registerAs` por domínio + Joi (`phase-01-configuracao-base/TD-01..TD-04`). Novos namespaces (`storage`, `queue`) seguem esse padrão, sem TD própria.
 > - **OpenAPI:** `@nestjs/swagger` + `openapi.json` exportado (`openapi-docs-nestjs/TD-01..TD-02`). Novos endpoints são documentados com decoradores explícitos.

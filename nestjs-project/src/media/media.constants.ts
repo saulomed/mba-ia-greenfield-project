@@ -1,0 +1,7 @@
+export const MEDIA_COMMAND_TIMEOUTS_MS = {
+  PROBE: 30_000,
+  NORMALIZE: 300_000,
+  THUMBNAIL: 30_000,
+} as const;
+
+export const THUMBNAIL_MAX_WIDTH = 1280;

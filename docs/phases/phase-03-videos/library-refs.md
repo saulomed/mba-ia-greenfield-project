@@ -1,32 +1,32 @@
 ---
 libs:
   "@aws-sdk/client-s3":
-    version: "^3.x (não instalado — fixar na implementação)"
+    version: "^3.1131.0"
     context7_id: "/aws/aws-sdk-js-v3"
     fetched_at: "2026-09-13T16:17:46Z"
   "@aws-sdk/s3-request-presigner":
-    version: "^3.x (não instalado — mesma minor de @aws-sdk/client-s3)"
+    version: "^3.1131.0"
     context7_id: "/aws/aws-sdk-js-v3"
     fetched_at: "2026-09-13T16:17:46Z"
   "@nestjs/bullmq":
-    version: "^11.x (não instalado — compatível com @nestjs/core ^11.0.1)"
+    version: "^11.0.5"
     context7_id: "/nestjs/docs.nestjs.com"
     fetched_at: "2026-09-13T16:17:46Z"
   "bullmq":
-    version: "^5.x (não instalado — peer de @nestjs/bullmq)"
+    version: "^5.81.5"
     context7_id: "/taskforcesh/bullmq"
     fetched_at: "2026-09-13T16:17:46Z"
 sources_mtime:
-  docs/decisions/technical-decisions-phase-03-upload-processing.md: "2026-09-13T17:04:25Z"
+  docs/decisions/technical-decisions-phase-03-videos.md: "2026-09-13T17:04:25Z"
 ---
 
 # Library References — Fase 03 (Upload e Processamento)
 
-Cache de documentação (Context7) das bibliotecas decididas em `phase-03-upload-processing`. Excertos focados nos usos definidos pelas TDs. Nenhuma das bibliotecas está instalada em `nestjs-project/package.json` ainda: as versões são faixas compatíveis com o stack atual (NestJS 11) e devem ser fixadas no momento da instalação.
+Cache de documentação (Context7) das bibliotecas decididas em `phase-03-videos`. Excertos focados nos usos definidos pelas TDs. As versões foram fixadas na instalação (SI-03.1) e refletem `nestjs-project/package.json`; os excertos foram obtidos antes da instalação, com faixas compatíveis com o stack (NestJS 11).
 
 ## @aws-sdk/client-s3
 
-_Usado por: phase-03-upload-processing/TD-01 (multipart), TD-02 (cliente de storage), TD-06 (conclusão), TD-10 (lifecycle), TD-11 (política de prefixo)._
+_Usado por: phase-03-videos/TD-01 (multipart), TD-02 (cliente de storage), TD-06 (conclusão), TD-10 (lifecycle), TD-11 (política de prefixo)._
 
 ### Cliente para MinIO (S3-compatível)
 
@@ -58,13 +58,15 @@ Import modular: importe `S3Client` e cada `*Command` individualmente e envie com
 
 `PutBucketLifecycleConfigurationCommand` com uma regra `AbortIncompleteMultipartUpload: { DaysAfterInitiation: N }`: o storage remove as partes de uploads não concluídos após N dias.
 
+> Nota de implementação (15/09/2026, Context7 `/minio/docs`, S3 API Compatibility): o MinIO não suporta a ação `AbortIncompleteMultipartUpload` em `PutBucketLifecycle`. No ambiente local a regra é rejeitada (aviso no bootstrap) e a limpeza de partes órfãs fica com `MINIO_API_STALE_UPLOADS_EXPIRY`; a regra vale no S3.
+
 ### Política de leitura por prefixo (TD-11)
 
 `PutBucketPolicyCommand` com `s3:GetObject` anônimo restrito a `arn:aws:s3:::<bucket>/thumbnails/*`, sem `s3:ListBucket`. No MinIO o equivalente administrativo é `mc anonymous set download ALIAS/<bucket>/thumbnails`.
 
 ## @aws-sdk/s3-request-presigner
 
-_Usado por: phase-03-upload-processing/TD-01 (URLs de `UploadPart`), TD-09 (URLs de streaming/download)._
+_Usado por: phase-03-videos/TD-01 (URLs de `UploadPart`), TD-09 (URLs de streaming/download)._
 
 ```typescript
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -89,7 +91,7 @@ const downloadUrl = await getSignedUrl(
 
 ## @nestjs/bullmq
 
-_Usado por: phase-03-upload-processing/TD-03 (fila), TD-04 (worker em processo separado), TD-06 (enfileiramento), TD-10 (job agendado)._
+_Usado por: phase-03-videos/TD-03 (fila), TD-04 (worker em processo separado), TD-06 (enfileiramento), TD-10 (job agendado)._
 
 ### Conexão via ConfigService
 
@@ -139,7 +141,7 @@ export class VideoProcessingConsumer extends WorkerHost {
 
 ## bullmq
 
-_Usado por: phase-03-upload-processing/TD-03, TD-06 (idempotência), TD-10 (agendamento)._
+_Usado por: phase-03-videos/TD-03, TD-06 (idempotência), TD-10 (agendamento)._
 
 - **Retry com backoff:** `queue.add(name, data, { attempts: 5, backoff: { type: 'exponential', delay: 1000 } })`.
 - **Parar retries:** lançar `UnrecoverableError` move o job direto para `failed`, ignorando `attempts`. Use para mídia inválida ou corrompida (estado `failed` com motivo, AMB-4).

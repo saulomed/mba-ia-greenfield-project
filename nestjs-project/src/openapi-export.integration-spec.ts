@@ -66,29 +66,35 @@ describe('exportSpec (integration)', () => {
     expect(props).toHaveProperty('code');
   });
 
-  it('has at least one path with a 401 response referencing ApiErrorEnvelope', () => {
+  it('every 4xx response in the document references ApiErrorEnvelope', () => {
     const paths = document.paths as Record<
       string,
       Record<string, Record<string, unknown>>
     >;
     const apiErrorRef = '#/components/schemas/ApiErrorEnvelope';
 
-    const hasRef = Object.values(paths).some((methods) =>
-      Object.values(methods).some((operation) => {
-        const responses = operation.responses as Record<
-          string,
-          Record<string, unknown>
-        >;
-        const r401 = responses?.['401'];
-        if (!r401) return false;
-        const content = r401.content as Record<string, Record<string, unknown>>;
-        const jsonContent = content?.['application/json'];
-        const schema = jsonContent?.schema as Record<string, unknown>;
-        return schema?.['$ref'] === apiErrorRef;
-      }),
-    );
+    const fourXxResponses = Object.values(paths)
+      .flatMap((methods) => Object.values(methods))
+      .flatMap((operation) =>
+        Object.entries(
+          operation.responses as Record<string, Record<string, unknown>>,
+        ),
+      )
+      .filter(([status]) => status.startsWith('4'));
 
-    expect(hasRef).toBe(true);
+    expect(fourXxResponses.length).toBeGreaterThan(0);
+
+    for (const [, response] of fourXxResponses) {
+      const content = response.content as Record<
+        string,
+        Record<string, unknown>
+      >;
+      const schema = content?.['application/json']?.schema as Record<
+        string,
+        unknown
+      >;
+      expect(schema?.['$ref']).toBe(apiErrorRef);
+    }
   });
 
   it('protected auth endpoints include access-token security requirement', () => {
@@ -127,5 +133,21 @@ describe('exportSpec (integration)', () => {
         expect((operation.summary as string).length).toBeGreaterThan(0);
       }
     }
+  });
+
+  it('includes all 7 video endpoints', () => {
+    const paths = document.paths as Record<string, unknown>;
+
+    expect(Object.keys(paths)).toEqual(
+      expect.arrayContaining([
+        '/videos',
+        '/videos/{publicId}/upload/part-urls',
+        '/videos/{publicId}/upload/parts',
+        '/videos/{publicId}/upload/complete',
+        '/videos/{publicId}',
+        '/videos/{publicId}/stream',
+        '/videos/{publicId}/download',
+      ]),
+    );
   });
 });

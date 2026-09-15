@@ -1,11 +1,11 @@
 ---
 kind: phase
-name: phase-03-upload-processing
+name: phase-03-videos
 test_specs_aware: true
 sources_mtime:
-  docs/phases/phase-03-upload-processing/context.md: "2026-09-13T14:04:35-03:00"
-  docs/phases/phase-03-upload-processing/library-refs.md: "2026-09-13T14:04:37-03:00"
-  docs/decisions/technical-decisions-phase-03-upload-processing.md: "2026-09-13T14:04:25-03:00"
+  docs/phases/phase-03-videos/context.md: "2026-09-13T14:04:35-03:00"
+  docs/phases/phase-03-videos/library-refs.md: "2026-09-13T14:04:37-03:00"
+  docs/decisions/technical-decisions-phase-03-videos.md: "2026-09-13T14:04:25-03:00"
   docs/decisions/technical-decisions-openapi-docs-nestjs.md: "2026-09-13T11:07:43-03:00"
   docs/decisions/technical-decisions-next-frontend-config-base.md: "2026-09-13T11:07:43-03:00"
   docs/decisions/technical-decisions-next-frontend-openapi-typing.md: "2026-09-13T11:07:43-03:00"
@@ -28,11 +28,11 @@ Entregar no `nestjs-project` o upload de vídeos de até 10GB sem impacto na per
 
 **Technical actions:**
 
-1. Instalar no `nestjs-project` (dentro do container): `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner` (mesma minor), `@nestjs/bullmq`, `bullmq` — versões fixadas no momento da instalação conforme `library-refs.md` (per `phase-03-upload-processing/TD-01`, `phase-03-upload-processing/TD-02`, `phase-03-upload-processing/TD-03`)
-2. Criar `src/config/storage.config.ts` — `registerAs('storage', ...)` com `STORAGE_ENDPOINT` (interno, ex.: `http://minio:9000`), `STORAGE_PUBLIC_ENDPOINT` (usado só para assinar URLs acessíveis pelo navegador, ex.: `http://localhost:9000`), `STORAGE_REGION` (default `'us-east-1'`), `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`, `STORAGE_BUCKET` (default `'streamtube'`); `src/config/queue.config.ts` — `registerAs('queue', ...)` com `QUEUE_HOST` (default `'redis'`), `QUEUE_PORT` (default `6379`); `src/config/video.config.ts` — `registerAs('video', ...)` com `VIDEO_MAX_UPLOAD_BYTES` (default `10737418240`), `VIDEO_UPLOAD_PART_URL_TTL_SECONDS` (default `3600`), `VIDEO_PLAYBACK_URL_TTL_SECONDS` (default `900`), `VIDEO_DRAFT_TTL_HOURS` (default `24`), `VIDEO_MULTIPART_ABORT_DAYS` (default `1`) (per `phase-01-configuracao-base/TD-03`, `phase-03-upload-processing/TD-02`, `phase-03-upload-processing/TD-09`, `phase-03-upload-processing/TD-10`, `phase-03-upload-processing/TD-12`)
+1. Instalar no `nestjs-project` (dentro do container): `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner` (mesma minor), `@nestjs/bullmq`, `bullmq` — versões fixadas no momento da instalação conforme `library-refs.md` (per `phase-03-videos/TD-01`, `phase-03-videos/TD-02`, `phase-03-videos/TD-03`)
+2. Criar `src/config/storage.config.ts` — `registerAs('storage', ...)` com `STORAGE_ENDPOINT` (interno, ex.: `http://minio:9000`), `STORAGE_PUBLIC_ENDPOINT` (usado só para assinar URLs acessíveis pelo navegador, ex.: `http://localhost:9000`), `STORAGE_REGION` (default `'us-east-1'`), `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`, `STORAGE_BUCKET` (default `'streamtube'`); `src/config/queue.config.ts` — `registerAs('queue', ...)` com `QUEUE_HOST` (default `'redis'`), `QUEUE_PORT` (default `6379`); `src/config/video.config.ts` — `registerAs('video', ...)` com `VIDEO_MAX_UPLOAD_BYTES` (default `10737418240`), `VIDEO_UPLOAD_PART_URL_TTL_SECONDS` (default `3600`), `VIDEO_PLAYBACK_URL_TTL_SECONDS` (default `900`), `VIDEO_DRAFT_TTL_HOURS` (default `24`), `VIDEO_MULTIPART_ABORT_DAYS` (default `1`) (per `phase-01-configuracao-base/TD-03`, `phase-03-videos/TD-02`, `phase-03-videos/TD-09`, `phase-03-videos/TD-10`, `phase-03-videos/TD-12`)
 3. Atualizar `src/config/env.validation.ts` com todas as chaves acima (`STORAGE_ACCESS_KEY` e `STORAGE_SECRET_KEY` obrigatórias; demais com default) e `.env.example` com valores compatíveis com o Compose (hosts pelo nome do serviço: `minio`, `redis`) (per `phase-01-configuracao-base/TD-02`)
-4. Adicionar a `compose.yaml`: serviço `minio` (`minio/minio`, `server /data --console-address :9001`, portas `9000`/`9001`, volume nomeado, healthcheck, `MINIO_API_CORS_ALLOW_ORIGIN` para permitir o `PUT` de partes pelo navegador e `MINIO_API_STALE_UPLOADS_EXPIRY` como rede de segurança de multipart abandonado); serviço `redis` (`redis:7`, healthcheck `redis-cli ping`); serviço `video-worker` com o mesmo `build`/volume do `nestjs-api`, comando `npm run start:worker:dev` e `depends_on` de `db`, `minio` e `redis`; `nestjs-api` passa a depender de `minio` e `redis` (per `phase-03-upload-processing/TD-02`, `phase-03-upload-processing/TD-03`, `phase-03-upload-processing/TD-04`)
-5. Instalar `ffmpeg` (que inclui `ffprobe`) em `Dockerfile.dev` via `apt-get` — a imagem de desenvolvimento é compartilhada por `nestjs-api` e `video-worker` (mesmo codebase) e é onde as suítes de teste rodam; o código da API nunca invoca o binário (só o `WorkerModule` importa o `MediaModule`), e a restrição do binário à imagem do worker vale para a imagem de produção, fora do escopo desta fase (per `phase-03-upload-processing/TD-05`, `phase-03-upload-processing/TD-12`)
+4. Adicionar a `compose.yaml`: serviço `minio` (`minio/minio`, `server /data --console-address :9001`, portas `9000`/`9001`, volume nomeado, healthcheck, `MINIO_API_CORS_ALLOW_ORIGIN` para permitir o `PUT` de partes pelo navegador e `MINIO_API_STALE_UPLOADS_EXPIRY` como rede de segurança de multipart abandonado); serviço `redis` (`redis:7`, healthcheck `redis-cli ping`); serviço `video-worker` com o mesmo `build`/volume do `nestjs-api`, comando `npm run start:worker:dev` e `depends_on` de `db`, `minio` e `redis`; `nestjs-api` passa a depender de `minio` e `redis` (per `phase-03-videos/TD-02`, `phase-03-videos/TD-03`, `phase-03-videos/TD-04`)
+5. Instalar `ffmpeg` (que inclui `ffprobe`) em `Dockerfile.dev` via `apt-get` — a imagem de desenvolvimento é compartilhada por `nestjs-api` e `video-worker` (mesmo codebase) e é onde as suítes de teste rodam; o código da API nunca invoca o binário (só o `WorkerModule` importa o `MediaModule`), e a restrição do binário à imagem do worker vale para a imagem de produção, fora do escopo desta fase (per `phase-03-videos/TD-05`, `phase-03-videos/TD-12`)
 
 **Tests:**
 
@@ -58,10 +58,10 @@ Entregar no `nestjs-project` o upload de vídeos de até 10GB sem impacto na per
 
 **Technical actions:**
 
-1. Criar `src/test/video-fixtures.ts` — matriz declarada em código (`mp4-h264-aac-faststart`, `mp4-h264-aac-no-faststart`, `mkv-hevc-aac`, `webm-vp9-opus`, `mp4-video-only`, `truncated`), cada item com os argumentos `ffmpeg -f lavfi -i testsrc2=duration=2:size=320x240:rate=25` + `-f lavfi -i sine=frequency=440:duration=2` (exceto `mp4-video-only`); `truncated` corta os bytes finais de um MP4 válido; `getVideoFixture(name): Promise<string>` devolve o caminho em `os.tmpdir()/streamtube-video-fixtures/{hash dos argumentos}/` e gera só quando o arquivo não existe (per `phase-03-upload-processing/TD-12`, `phase-03-upload-processing/TD-05`)
-2. Criar `src/test/global-setup.ts` que pré-gera toda a matriz e registrar como `globalSetup` na configuração Jest de `package.json` e em `test/jest-e2e.json` (per `phase-03-upload-processing/TD-12`)
-3. Criar `src/test/synthetic-bytes.ts` — `createSyntheticStream(totalBytes: number): Readable` com conteúdo determinístico gerado em blocos sem alocar o total em memória, e `buildSyntheticPart(partNumber: number, sizeBytes: number): Buffer` para partes de exatamente 5 MiB (mínimo S3/MinIO, exceto a última) (per `phase-03-upload-processing/TD-12`, `phase-03-upload-processing/TD-01`)
-4. Criar `src/test/setup-env.ts`, registrado em `setupFiles` após `dotenv/config`, que define para o processo Jest `VIDEO_MAX_UPLOAD_BYTES=12582912` (12 MiB) e `STORAGE_PUBLIC_ENDPOINT` igual a `STORAGE_ENDPOINT` quando não definidos explicitamente, para que URLs pré-assinadas sejam alcançáveis de dentro do container (per `phase-03-upload-processing/TD-12`, `phase-03-upload-processing/TD-02`)
+1. Criar `src/test/video-fixtures.ts` — matriz declarada em código (`mp4-h264-aac-faststart`, `mp4-h264-aac-no-faststart`, `mkv-hevc-aac`, `webm-vp9-opus`, `mp4-video-only`, `truncated`), cada item com os argumentos `ffmpeg -f lavfi -i testsrc2=duration=2:size=320x240:rate=25` + `-f lavfi -i sine=frequency=440:duration=2` (exceto `mp4-video-only`); `truncated` corta os bytes finais de um MP4 válido; `getVideoFixture(name): Promise<string>` devolve o caminho em `os.tmpdir()/streamtube-video-fixtures/{hash dos argumentos}/` e gera só quando o arquivo não existe (per `phase-03-videos/TD-12`, `phase-03-videos/TD-05`)
+2. Criar `src/test/global-setup.ts` que pré-gera toda a matriz e registrar como `globalSetup` na configuração Jest de `package.json` e em `test/jest-e2e.json` (per `phase-03-videos/TD-12`)
+3. Criar `src/test/synthetic-bytes.ts` — `createSyntheticStream(totalBytes: number): Readable` com conteúdo determinístico gerado em blocos sem alocar o total em memória, e `buildSyntheticPart(partNumber: number, sizeBytes: number): Buffer` para partes de exatamente 5 MiB (mínimo S3/MinIO, exceto a última) (per `phase-03-videos/TD-12`, `phase-03-videos/TD-01`)
+4. Criar `src/test/setup-env.ts`, registrado em `setupFiles` após `dotenv/config`, que define para o processo Jest `VIDEO_MAX_UPLOAD_BYTES=12582912` (12 MiB) e `STORAGE_PUBLIC_ENDPOINT` igual a `STORAGE_ENDPOINT` quando não definidos explicitamente, para que URLs pré-assinadas sejam alcançáveis de dentro do container (per `phase-03-videos/TD-12`, `phase-03-videos/TD-02`)
 
 **Tests:**
 
@@ -87,10 +87,10 @@ Entregar no `nestjs-project` o upload de vídeos de até 10GB sem impacto na per
 
 **Technical actions:**
 
-1. Criar `src/storage/storage.module.ts` e `src/storage/storage.constants.ts` com dois providers de `S3Client` injetados por token (`STORAGE_CLIENT` com `STORAGE_ENDPOINT`, `STORAGE_PRESIGN_CLIENT` com `STORAGE_PUBLIC_ENDPOINT`), ambos com `forcePathStyle: true`, `region` e credenciais do namespace `storage` (per `phase-03-upload-processing/TD-02`, `phase-01-configuracao-base/TD-03`)
-2. Criar `src/storage/storage.service.ts` com as operações de multipart via client interno: `createMultipartUpload(key, contentType)`, `listParts(key, uploadId)` (paginando por `PartNumberMarker` até `IsTruncated = false`), `completeMultipartUpload(key, uploadId, parts)`, `abortMultipartUpload(key, uploadId)` (tratando `NoSuchUpload` como sucesso), `headObject(key)` e `deleteObject(key)`; erros do SDK (`InvalidPart`, `InvalidPartOrder`, `EntityTooSmall`, `NoSuchKey`) são traduzidos para erros tipados do módulo, nunca vazam para os serviços de domínio (per `phase-03-upload-processing/TD-01`, `phase-03-upload-processing/TD-06`)
-3. Adicionar a `StorageService` as operações de objeto e assinatura: `downloadToFile(key, path)` e `uploadFile(path, key, { contentType, cacheControl })` por stream (sem carregar o arquivo em memória), `presignUploadPart(key, uploadId, partNumber, expiresIn)` e `presignGetObject(key, expiresIn, { responseContentDisposition? })` via `getSignedUrl` com o client de endpoint público (per `phase-03-upload-processing/TD-01`, `phase-03-upload-processing/TD-09`)
-4. Criar `src/storage/storage-bootstrap.service.ts` (`OnApplicationBootstrap`): cria o bucket se não existir; aplica `PutBucketLifecycleConfiguration` com `AbortIncompleteMultipartUpload.DaysAfterInitiation = VIDEO_MULTIPART_ABORT_DAYS` (se o MinIO rejeitar a regra, registra aviso — o `MINIO_API_STALE_UPLOADS_EXPIRY` da SI-03.1 cobre o ambiente local); aplica `PutBucketPolicy` com `s3:GetObject` anônimo restrito a `arn:aws:s3:::{bucket}/thumbnails/*`, sem `s3:ListBucket`; operações idempotentes (per `phase-03-upload-processing/TD-10`, `phase-03-upload-processing/TD-11`)
+1. Criar `src/storage/storage.module.ts` e `src/storage/storage.constants.ts` com dois providers de `S3Client` injetados por token (`STORAGE_CLIENT` com `STORAGE_ENDPOINT`, `STORAGE_PRESIGN_CLIENT` com `STORAGE_PUBLIC_ENDPOINT`), ambos com `forcePathStyle: true`, `region` e credenciais do namespace `storage` (per `phase-03-videos/TD-02`, `phase-01-configuracao-base/TD-03`)
+2. Criar `src/storage/storage.service.ts` com as operações de multipart via client interno: `createMultipartUpload(key, contentType)`, `listParts(key, uploadId)` (paginando por `PartNumberMarker` até `IsTruncated = false`), `completeMultipartUpload(key, uploadId, parts)`, `abortMultipartUpload(key, uploadId)` (tratando `NoSuchUpload` como sucesso), `headObject(key)` e `deleteObject(key)`; erros do SDK (`InvalidPart`, `InvalidPartOrder`, `EntityTooSmall`, `NoSuchKey`) são traduzidos para erros tipados do módulo, nunca vazam para os serviços de domínio (per `phase-03-videos/TD-01`, `phase-03-videos/TD-06`)
+3. Adicionar a `StorageService` as operações de objeto e assinatura: `downloadToFile(key, path)` e `uploadFile(path, key, { contentType, cacheControl })` por stream (sem carregar o arquivo em memória), `presignUploadPart(key, uploadId, partNumber, expiresIn)` e `presignGetObject(key, expiresIn, { responseContentDisposition? })` via `getSignedUrl` com o client de endpoint público (per `phase-03-videos/TD-01`, `phase-03-videos/TD-09`)
+4. Criar `src/storage/storage-bootstrap.service.ts` (`OnApplicationBootstrap`): cria o bucket se não existir; aplica `PutBucketLifecycleConfiguration` com `AbortIncompleteMultipartUpload.DaysAfterInitiation = VIDEO_MULTIPART_ABORT_DAYS` (se o MinIO rejeitar a regra, registra aviso — o `MINIO_API_STALE_UPLOADS_EXPIRY` da SI-03.1 cobre o ambiente local); aplica `PutBucketPolicy` com `s3:GetObject` anônimo restrito a `arn:aws:s3:::{bucket}/thumbnails/*`, sem `s3:ListBucket`; operações idempotentes (per `phase-03-videos/TD-10`, `phase-03-videos/TD-11`)
 
 **Tests:**
 
@@ -119,10 +119,10 @@ Entregar no `nestjs-project` o upload de vídeos de até 10GB sem impacto na per
 
 **Technical actions:**
 
-1. Criar `src/videos/entities/video.entity.ts` — `@Entity('videos')` com as colunas, tipos, constraints e índices de `### Data Model → Video` (enum `status` com `'uploading'`, `'processing'`, `'ready'`, `'failed'` e default `'uploading'`; `size_bytes` `bigint` mapeado com transformer para `number`; `duration_seconds` `numeric(10,3)` com transformer para `number`) e `@ManyToOne(() => Channel)` via `channel_id` (per `phase-03-upload-processing/TD-07`, `phase-03-upload-processing/TD-08`, `phase-03-upload-processing/TD-11`)
+1. Criar `src/videos/entities/video.entity.ts` — `@Entity('videos')` com as colunas, tipos, constraints e índices de `### Data Model → Video` (enum `status` com `'uploading'`, `'processing'`, `'ready'`, `'failed'` e default `'uploading'`; `size_bytes` `bigint` mapeado com transformer para `number`; `duration_seconds` `numeric(10,3)` com transformer para `number`) e `@ManyToOne(() => Channel)` via `channel_id` (per `phase-03-videos/TD-07`, `phase-03-videos/TD-08`, `phase-03-videos/TD-11`)
 2. Adicionar o lado inverso `@OneToMany(() => Video, (video) => video.channel)` em `src/channels/entities/channel.entity.ts`
 3. Gerar a migration via TypeORM CLI (`CreateVideos`) criando o enum, a tabela `videos`, a FK para `channels.id` e os índices `(public_id)` unique, `(channel_id)` e `(status, created_at)`; incluir `Video` nas entidades de `data-source.ts` e de `src/test/create-test-data-source.ts` (per `phase-01-configuracao-base/TD-04`)
-4. Criar `src/videos/public-id.util.ts` — `generatePublicId(length = 11): string` com `crypto.randomBytes` e amostragem por rejeição sobre o alfabeto base62 (sem viés de módulo) (per `phase-03-upload-processing/TD-07`)
+4. Criar `src/videos/public-id.util.ts` — `generatePublicId(length = 11): string` com `crypto.randomBytes` e amostragem por rejeição sobre o alfabeto base62 (sem viés de módulo) (per `phase-03-videos/TD-07`)
 5. Criar `src/videos/videos.module.ts` com `TypeOrmModule.forFeature([Video])` e registrá-lo em `AppModule`
 
 **Tests:**
@@ -151,10 +151,10 @@ Entregar no `nestjs-project` o upload de vídeos de até 10GB sem impacto na per
 
 **Technical actions:**
 
-1. Criar `src/queue/queue.module.ts` com `BullModule.forRootAsync` lendo `QUEUE_HOST`/`QUEUE_PORT` do namespace `queue` via `ConfigService` (per `phase-03-upload-processing/TD-03`, `phase-01-configuracao-base/TD-01`)
-2. Criar `src/videos/videos.constants.ts` com `VIDEO_QUEUES = { PROCESSING: 'video-processing', MAINTENANCE: 'video-maintenance' } as const` e `VIDEO_JOBS = { PROCESS: 'process', EXPIRE_DRAFTS: 'expire-drafts' } as const`, e registrar `BullModule.registerQueue` das duas filas no `VideosModule` (produtor) (per `phase-03-upload-processing/TD-03`)
-3. Criar `src/worker/worker.module.ts` importando `ConfigModule` (mesmo schema de validação), `TypeOrmModule.forRootAsync` (mesmo `databaseConfig`), `QueueModule`, `StorageModule` e o registro das duas filas; nenhum controller e nenhum `@Processor` no `AppModule` (per `phase-03-upload-processing/TD-04`, `phase-01-configuracao-base/TD-01`)
-4. Criar `src/worker/main.ts` com `NestFactory.createApplicationContext(WorkerModule)` e `enableShutdownHooks()` para encerrar workers BullMQ de forma graciosa no `SIGTERM` (per `phase-03-upload-processing/TD-04`)
+1. Criar `src/queue/queue.module.ts` com `BullModule.forRootAsync` lendo `QUEUE_HOST`/`QUEUE_PORT` do namespace `queue` via `ConfigService` (per `phase-03-videos/TD-03`, `phase-01-configuracao-base/TD-01`)
+2. Criar `src/videos/videos.constants.ts` com `VIDEO_QUEUES = { PROCESSING: 'video-processing', MAINTENANCE: 'video-maintenance' } as const` e `VIDEO_JOBS = { PROCESS: 'process', EXPIRE_DRAFTS: 'expire-drafts' } as const`, e registrar `BullModule.registerQueue` das duas filas no `VideosModule` (produtor) (per `phase-03-videos/TD-03`)
+3. Criar `src/worker/worker.module.ts` importando `ConfigModule` (mesmo schema de validação), `TypeOrmModule.forRootAsync` (mesmo `databaseConfig`), `QueueModule`, `StorageModule` e o registro das duas filas; nenhum controller e nenhum `@Processor` no `AppModule` (per `phase-03-videos/TD-04`, `phase-01-configuracao-base/TD-01`)
+4. Criar `src/worker/main.ts` com `NestFactory.createApplicationContext(WorkerModule)` e `enableShutdownHooks()` para encerrar workers BullMQ de forma graciosa no `SIGTERM` (per `phase-03-videos/TD-04`)
 5. Adicionar scripts `start:worker:dev` (`nest start --watch --entryFile worker/main`) e `start:worker:prod` (`node dist/worker/main`) em `package.json`
 
 **Tests:**
@@ -181,11 +181,11 @@ Entregar no `nestjs-project` o upload de vídeos de até 10GB sem impacto na per
 
 **Technical actions:**
 
-1. Criar `src/media/ffmpeg.runner.ts` — executa `ffmpeg`/`ffprobe` via `spawn` com argumentos em array (sem shell), timeout configurável, captura de `stderr` limitada e erro tipado `MediaCommandError` com código de saída (per `phase-03-upload-processing/TD-05`)
-2. Criar `src/media/media.service.ts` com `probe(path)` — `ffprobe -v error -print_format json -show_format -show_streams`; devolve `{ duration_seconds, width, height, video_codec, audio_codec }` com os nomes de `### Data Model → Video`; lança `InvalidMediaError` quando o `ffprobe` falha ou não há stream de vídeo (per `phase-03-upload-processing/TD-05`)
-3. Adicionar `normalize(inputPath, outputPath, probe)` — remux (`-c copy`) quando `video_codec = 'h264'` e `audio_codec` é `'aac'` ou nulo; caso contrário transcodifica com `-c:v libx264 -pix_fmt yuv420p -c:a aac`; sempre `-movflags +faststart` e saída `.mp4` (per `phase-03-upload-processing/TD-08`)
-4. Adicionar `extractThumbnail(inputPath, outputPath, durationSeconds)` — um frame JPEG em `min(1, durationSeconds / 2)` segundos com largura máxima de 1280 px preservando proporção (per `phase-03-upload-processing/TD-05`, `phase-03-upload-processing/TD-11`)
-5. Criar `src/media/media.module.ts` exportando `MediaService` e importá-lo **somente** no `WorkerModule` (per `phase-03-upload-processing/TD-04`)
+1. Criar `src/media/ffmpeg.runner.ts` — executa `ffmpeg`/`ffprobe` via `spawn` com argumentos em array (sem shell), timeout configurável, captura de `stderr` limitada e erro tipado `MediaCommandError` com código de saída (per `phase-03-videos/TD-05`)
+2. Criar `src/media/media.service.ts` com `probe(path)` — `ffprobe -v error -print_format json -show_format -show_streams`; devolve `{ duration_seconds, width, height, video_codec, audio_codec }` com os nomes de `### Data Model → Video`; lança `InvalidMediaError` quando o `ffprobe` falha ou não há stream de vídeo (per `phase-03-videos/TD-05`)
+3. Adicionar `normalize(inputPath, outputPath, probe)` — remux (`-c copy`) quando `video_codec = 'h264'` e `audio_codec` é `'aac'` ou nulo; caso contrário transcodifica com `-c:v libx264 -pix_fmt yuv420p -c:a aac`; sempre `-movflags +faststart` e saída `.mp4` (per `phase-03-videos/TD-08`)
+4. Adicionar `extractThumbnail(inputPath, outputPath, durationSeconds)` — um frame JPEG em `min(1, durationSeconds / 2)` segundos com largura máxima de 1280 px preservando proporção (per `phase-03-videos/TD-05`, `phase-03-videos/TD-11`)
+5. Criar `src/media/media.module.ts` exportando `MediaService` e importá-lo **somente** no `WorkerModule` (per `phase-03-videos/TD-04`)
 
 **Tests:**
 
@@ -219,7 +219,7 @@ Entregar no `nestjs-project` o upload de vídeos de até 10GB sem impacto na per
 
 1. Criar `src/videos/dto/create-video-upload.dto.ts` com `filename`, `content_type` e `size_bytes` conforme `### API Contracts → POST /videos` e `#### Validation Rules — Upload de vídeos` (per `phase-02-auth/TD-06`)
 2. Criar `src/videos/video.exceptions.ts` com as subclasses de `DomainException` de `### Error Catalog` (`VideoNotFoundException`, `VideoTooLargeException`, `VideoUploadNotInProgressException`, `InvalidUploadPartsException`, `UploadSizeMismatchException`, `VideoNotReadyException`) com `errorCode`, HTTP e mensagem exatamente como no catálogo (per `phase-02-auth/TD-07`)
-3. Criar `src/videos/videos.service.ts` com `initiateUpload(userId, dto)`: resolve o canal do usuário via `ChannelsService` (adicionando `findByUserId` se ainda não existir — a entidade `Channel` continua sob `ChannelsModule`); rejeita `size_bytes > VIDEO_MAX_UPLOAD_BYTES` com `VIDEO_TOO_LARGE`; deriva `title` do nome sem extensão truncado a 100 caracteres (AMB-3); gera `public_id` com retry em violação de unique; calcula `part_size_bytes`/`part_count` pela fórmula do contrato; chama `StorageService.createMultipartUpload` com `original_key = videos/{public_id}/original` e persiste o rascunho com `upload_id` (per `phase-03-upload-processing/TD-01`, `phase-03-upload-processing/TD-07`, `phase-03-upload-processing/TD-12`)
+3. Criar `src/videos/videos.service.ts` com `initiateUpload(userId, dto)`: resolve o canal do usuário via `ChannelsService` (adicionando `findByUserId` se ainda não existir — a entidade `Channel` continua sob `ChannelsModule`); rejeita `size_bytes > VIDEO_MAX_UPLOAD_BYTES` com `VIDEO_TOO_LARGE`; deriva `title` do nome sem extensão truncado a 100 caracteres (AMB-3); gera `public_id` com retry em violação de unique; calcula `part_size_bytes`/`part_count` pela fórmula do contrato; chama `StorageService.createMultipartUpload` com `original_key = videos/{public_id}/original` e persiste o rascunho com `upload_id` (per `phase-03-videos/TD-01`, `phase-03-videos/TD-07`, `phase-03-videos/TD-12`)
 4. Criar `src/videos/videos.controller.ts` com `POST /videos` retornando 201 no shape de `### API Contracts → POST /videos`, usando `@CurrentUser()` e decoradores explícitos `@ApiOperation`, `@ApiBody`, `@ApiResponse` por status (201, 400, 401, 413) com o envelope de erro de `phase-02-auth/TD-07` (per `openapi-docs-nestjs/TD-01`)
 5. Importar `StorageModule` e `ChannelsModule` no `VideosModule` e declarar controller e service
 
@@ -256,8 +256,8 @@ Entregar no `nestjs-project` o upload de vídeos de até 10GB sem impacto na per
 
 1. Criar `src/videos/dto/create-part-urls.dto.ts` com `part_numbers` conforme `### API Contracts → POST /videos/:publicId/upload/part-urls` e as `Validation Rules`
 2. Adicionar a `VideosService` o lookup `findOwnedByPublicId(userId, publicId)` — busca por `public_id` com `channel_id` do canal do usuário e lança `VideoNotFoundException` tanto para inexistente quanto para vídeo de outro canal (AMB-1, AMB-2)
-3. Adicionar `createPartUrls(userId, publicId, dto)` — exige `status = 'uploading'` (senão `VIDEO_UPLOAD_NOT_IN_PROGRESS`), rejeita `part_number > part_count` com erro de validação e assina cada parte com `StorageService.presignUploadPart` usando `VIDEO_UPLOAD_PART_URL_TTL_SECONDS`, devolvendo `parts[]` e `expires_at` (per `phase-03-upload-processing/TD-01`)
-4. Adicionar `listUploadedParts(userId, publicId)` — exige `status = 'uploading'` e mapeia `StorageService.listParts` para `{ part_number, etag, size_bytes }` (per `phase-03-upload-processing/TD-01`)
+3. Adicionar `createPartUrls(userId, publicId, dto)` — exige `status = 'uploading'` (senão `VIDEO_UPLOAD_NOT_IN_PROGRESS`), rejeita `part_number > part_count` com erro de validação e assina cada parte com `StorageService.presignUploadPart` usando `VIDEO_UPLOAD_PART_URL_TTL_SECONDS`, devolvendo `parts[]` e `expires_at` (per `phase-03-videos/TD-01`)
+4. Adicionar `listUploadedParts(userId, publicId)` — exige `status = 'uploading'` e mapeia `StorageService.listParts` para `{ part_number, etag, size_bytes }` (per `phase-03-videos/TD-01`)
 5. Adicionar ao `VideosController` `POST /videos/:publicId/upload/part-urls` (200) e `GET /videos/:publicId/upload/parts` (200) com `@ApiOperation`, `@ApiParam`, `@ApiBody` e `@ApiResponse` para 200, 400, 401, 404 e 409 (per `openapi-docs-nestjs/TD-01`)
 
 **Tests:**
@@ -291,9 +291,9 @@ Entregar no `nestjs-project` o upload de vídeos de até 10GB sem impacto na per
 **Technical actions:**
 
 1. Criar `src/videos/dto/complete-video-upload.dto.ts` com `parts[]` (`part_number`, `etag`) conforme `### API Contracts → POST /videos/:publicId/upload/complete` e as `Validation Rules`
-2. Adicionar a `VideosService` `completeUpload(userId, publicId, dto)`: exige `status = 'uploading'`; chama `StorageService.completeMultipartUpload` ordenando `parts` por `part_number` e traduz o erro tipado de partes inválidas em `INVALID_UPLOAD_PARTS` (rascunho continua `'uploading'` para nova tentativa) (per `phase-03-upload-processing/TD-06`)
-3. Na mesma operação, validar `StorageService.headObject(original_key).ContentLength`: acima de `VIDEO_MAX_UPLOAD_BYTES` remove objeto e rascunho e lança `VIDEO_TOO_LARGE`; diferente de `size_bytes` remove objeto e rascunho e lança `UPLOAD_SIZE_MISMATCH` (per `phase-03-upload-processing/TD-06`, `phase-03-upload-processing/TD-12`)
-4. Com o tamanho válido, persistir `status = 'processing'`, `upload_completed_at = now()` e `upload_id = null`, e publicar `VIDEO_JOBS.PROCESS` em `video-processing` com payload `{ videoId }`, `jobId = videoId`, `attempts: 3`, `backoff: { type: 'exponential', delay: 5000 }` e `removeOnComplete`, conforme `### Events/Messages` (per `phase-03-upload-processing/TD-03`, `phase-03-upload-processing/TD-06`)
+2. Adicionar a `VideosService` `completeUpload(userId, publicId, dto)`: exige `status = 'uploading'`; chama `StorageService.completeMultipartUpload` ordenando `parts` por `part_number` e traduz o erro tipado de partes inválidas em `INVALID_UPLOAD_PARTS` (rascunho continua `'uploading'` para nova tentativa) (per `phase-03-videos/TD-06`)
+3. Na mesma operação, validar `StorageService.headObject(original_key).ContentLength`: acima de `VIDEO_MAX_UPLOAD_BYTES` remove objeto e rascunho e lança `VIDEO_TOO_LARGE`; diferente de `size_bytes` remove objeto e rascunho e lança `UPLOAD_SIZE_MISMATCH` (per `phase-03-videos/TD-06`, `phase-03-videos/TD-12`)
+4. Com o tamanho válido, persistir `status = 'processing'`, `upload_completed_at = now()` e `upload_id = null`, e publicar `VIDEO_JOBS.PROCESS` em `video-processing` com payload `{ videoId }`, `jobId = videoId`, `attempts: 3`, `backoff: { type: 'exponential', delay: 5000 }` e `removeOnComplete`, conforme `### Events/Messages` (per `phase-03-videos/TD-03`, `phase-03-videos/TD-06`)
 5. Adicionar ao `VideosController` `POST /videos/:publicId/upload/complete` retornando `202` com `{ public_id, status }` e decoradores `@ApiOperation`, `@ApiParam`, `@ApiBody`, `@ApiResponse` para 202, 400, 401, 404, 409, 413 e 422 (per `openapi-docs-nestjs/TD-01`)
 
 **Tests:**
@@ -322,10 +322,10 @@ Entregar no `nestjs-project` o upload de vídeos de até 10GB sem impacto na per
 
 **Technical actions:**
 
-1. Criar `src/worker/video-processing.consumer.ts` — `@Processor('video-processing')` estendendo `WorkerHost`; `process(job)` carrega o `Video` por `job.data.videoId`, ignora vídeos já `'ready'` (idempotência at-least-once) e trabalha num diretório temporário exclusivo removido em `finally` (per `phase-03-upload-processing/TD-03`, `phase-03-upload-processing/TD-04`)
-2. No `process`: `StorageService.downloadToFile(original_key)` (objeto ausente → `failed`/`'SOURCE_MISSING'` + `UnrecoverableError`) → `MediaService.probe` (`InvalidMediaError` → `failed`/`'INVALID_MEDIA'` + `UnrecoverableError`) → `MediaService.normalize` → `MediaService.extractThumbnail`, atualizando `job.updateProgress` a cada etapa (per `phase-03-upload-processing/TD-05`, `phase-03-upload-processing/TD-08`)
-3. Enviar `playback.mp4` para `videos/{public_id}/playback.mp4` (`Content-Type: video/mp4`) e a thumbnail para `thumbnails/{randomBytes(16) em hex}.jpg` (`Content-Type: image/jpeg`, `Cache-Control: public, max-age=31536000, immutable`); persistir `duration_seconds`, `width`, `height`, `video_codec`, `audio_codec`, `playback_key`, `thumbnail_key`, `processed_at` e `status = 'ready'` (per `phase-03-upload-processing/TD-08`, `phase-03-upload-processing/TD-11`)
-4. Adicionar `@OnWorkerEvent('failed')` que, quando `job.attemptsMade >= job.opts.attempts` e o vídeo ainda não está `'failed'`, persiste `status = 'failed'`, `failure_reason = 'PROCESSING_ERROR'` e `processed_at` (per `phase-03-upload-processing/TD-03`)
+1. Criar `src/worker/video-processing.consumer.ts` — `@Processor('video-processing')` estendendo `WorkerHost`; `process(job)` carrega o `Video` por `job.data.videoId`, ignora vídeos já `'ready'` (idempotência at-least-once) e trabalha num diretório temporário exclusivo removido em `finally` (per `phase-03-videos/TD-03`, `phase-03-videos/TD-04`)
+2. No `process`: `StorageService.downloadToFile(original_key)` (objeto ausente → `failed`/`'SOURCE_MISSING'` + `UnrecoverableError`) → `MediaService.probe` (`InvalidMediaError` → `failed`/`'INVALID_MEDIA'` + `UnrecoverableError`) → `MediaService.normalize` → `MediaService.extractThumbnail`, atualizando `job.updateProgress` a cada etapa (per `phase-03-videos/TD-05`, `phase-03-videos/TD-08`)
+3. Enviar `playback.mp4` para `videos/{public_id}/playback.mp4` (`Content-Type: video/mp4`) e a thumbnail para `thumbnails/{randomBytes(16) em hex}.jpg` (`Content-Type: image/jpeg`, `Cache-Control: public, max-age=31536000, immutable`); persistir `duration_seconds`, `width`, `height`, `video_codec`, `audio_codec`, `playback_key`, `thumbnail_key`, `processed_at` e `status = 'ready'` (per `phase-03-videos/TD-08`, `phase-03-videos/TD-11`)
+4. Adicionar `@OnWorkerEvent('failed')` que, quando `job.attemptsMade >= job.opts.attempts` e o vídeo ainda não está `'failed'`, persiste `status = 'failed'`, `failure_reason = 'PROCESSING_ERROR'` e `processed_at` (per `phase-03-videos/TD-03`)
 5. Registrar `VideoProcessingConsumer`, `MediaModule` e `TypeOrmModule.forFeature([Video])` no `WorkerModule`
 
 **Tests:**
@@ -359,7 +359,7 @@ Entregar no `nestjs-project` o upload de vídeos de até 10GB sem impacto na per
 **Technical actions:**
 
 1. Criar `src/videos/dto/video-response.dto.ts` com os campos de `### API Contracts → GET /videos/:publicId` (sem expor `id`, `channel_id`, `upload_id` nem chaves internas de vídeo) e decoradores `@ApiProperty` com nulabilidade explícita (per `openapi-docs-nestjs/TD-01`)
-2. Adicionar a `VideosService` `getOwnedVideo(userId, publicId)` reutilizando `findOwnedByPublicId` e montando `thumbnail_url` como `{STORAGE_PUBLIC_ENDPOINT}/{STORAGE_BUCKET}/{thumbnail_key}` quando `thumbnail_key` não é nulo (per `phase-03-upload-processing/TD-11`)
+2. Adicionar a `VideosService` `getOwnedVideo(userId, publicId)` reutilizando `findOwnedByPublicId` e montando `thumbnail_url` como `{STORAGE_PUBLIC_ENDPOINT}/{STORAGE_BUCKET}/{thumbnail_key}` quando `thumbnail_key` não é nulo (per `phase-03-videos/TD-11`)
 3. Adicionar ao `VideosController` `GET /videos/:publicId` retornando `200` e decoradores `@ApiOperation`, `@ApiParam`, `@ApiResponse` para 200, 401 e 404 (per `openapi-docs-nestjs/TD-01`)
 
 **Tests:**
@@ -391,8 +391,8 @@ Entregar no `nestjs-project` o upload de vídeos de até 10GB sem impacto na per
 **Technical actions:**
 
 1. Criar `src/videos/dto/video-stream-response.dto.ts` e `src/videos/dto/video-download-response.dto.ts` com os campos de `### API Contracts → GET /videos/:publicId/stream` e `→ GET /videos/:publicId/download` (per `openapi-docs-nestjs/TD-01`)
-2. Adicionar a `VideosService` `getStreamUrl(userId, publicId)` — exige `status = 'ready'` (senão `VIDEO_NOT_READY`) e assina `playback_key` com `StorageService.presignGetObject` usando `VIDEO_PLAYBACK_URL_TTL_SECONDS`, devolvendo `content_type: 'video/mp4'` (per `phase-03-upload-processing/TD-09`, `phase-03-upload-processing/TD-08`)
-3. Adicionar `getDownloadUrl(userId, publicId)` — exige `status = 'ready'` e assina `original_key` com `responseContentDisposition` `attachment; filename="{ascii fallback}"; filename*=UTF-8''{original_filename codificado}` (AMB-1) (per `phase-03-upload-processing/TD-09`)
+2. Adicionar a `VideosService` `getStreamUrl(userId, publicId)` — exige `status = 'ready'` (senão `VIDEO_NOT_READY`) e assina `playback_key` com `StorageService.presignGetObject` usando `VIDEO_PLAYBACK_URL_TTL_SECONDS`, devolvendo `content_type: 'video/mp4'` (per `phase-03-videos/TD-09`, `phase-03-videos/TD-08`)
+3. Adicionar `getDownloadUrl(userId, publicId)` — exige `status = 'ready'` e assina `original_key` com `responseContentDisposition` `attachment; filename="{ascii fallback}"; filename*=UTF-8''{original_filename codificado}` (AMB-1) (per `phase-03-videos/TD-09`)
 4. Adicionar ao `VideosController` `GET /videos/:publicId/stream` e `GET /videos/:publicId/download` retornando `200` e decoradores `@ApiOperation`, `@ApiParam`, `@ApiResponse` para 200, 401, 404 e 409 (per `openapi-docs-nestjs/TD-01`)
 
 **Tests:**
@@ -421,9 +421,9 @@ Entregar no `nestjs-project` o upload de vídeos de até 10GB sem impacto na per
 
 **Technical actions:**
 
-1. Criar `src/worker/video-maintenance.scheduler.ts` (`OnApplicationBootstrap` no `WorkerModule`) que chama `queue.upsertJobScheduler('expire-drafts', { every: 3600000 }, { name: VIDEO_JOBS.EXPIRE_DRAFTS })` na fila `video-maintenance` — idempotente entre reinícios (per `phase-03-upload-processing/TD-10`, `phase-03-upload-processing/TD-03`)
-2. Criar `src/worker/video-maintenance.consumer.ts` — `@Processor('video-maintenance')`; busca vídeos com `status = 'uploading'` e `created_at < now - VIDEO_DRAFT_TTL_HOURS` (usa o índice `(status, created_at)`) em lotes (per `phase-03-upload-processing/TD-10`)
-3. Para cada rascunho expirado, chamar `StorageService.abortMultipartUpload(original_key, upload_id)` (`NoSuchUpload` já tratado como sucesso) e remover o registro; falha num item é registrada em log e não interrompe o lote (per `phase-03-upload-processing/TD-10`)
+1. Criar `src/worker/video-maintenance.scheduler.ts` (`OnApplicationBootstrap` no `WorkerModule`) que chama `queue.upsertJobScheduler('expire-drafts', { every: 3600000 }, { name: VIDEO_JOBS.EXPIRE_DRAFTS })` na fila `video-maintenance` — idempotente entre reinícios (per `phase-03-videos/TD-10`, `phase-03-videos/TD-03`)
+2. Criar `src/worker/video-maintenance.consumer.ts` — `@Processor('video-maintenance')`; busca vídeos com `status = 'uploading'` e `created_at < now - VIDEO_DRAFT_TTL_HOURS` (usa o índice `(status, created_at)`) em lotes (per `phase-03-videos/TD-10`)
+3. Para cada rascunho expirado, chamar `StorageService.abortMultipartUpload(original_key, upload_id)` (`NoSuchUpload` já tratado como sucesso) e remover o registro; falha num item é registrada em log e não interrompe o lote (per `phase-03-videos/TD-10`)
 4. Registrar `VideoMaintenanceScheduler` e `VideoMaintenanceConsumer` no `WorkerModule`
 
 **Tests:**
@@ -480,8 +480,8 @@ Tabela `videos` (entidade `Video`, módulo `VideosModule`).
 
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
-| id | uuid | PK, generated | Identificador interno; nunca exposto em URL *(per phase-03-upload-processing/TD-07)* |
-| public_id | varchar(16) | unique, not null | ID curto base62 aleatório gerado na aplicação; usado em todas as rotas públicas *(per phase-03-upload-processing/TD-07)* |
+| id | uuid | PK, generated | Identificador interno; nunca exposto em URL *(per phase-03-videos/TD-07)* |
+| public_id | varchar(16) | unique, not null | ID curto base62 aleatório gerado na aplicação; usado em todas as rotas públicas *(per phase-03-videos/TD-07)* |
 | channel_id | uuid | FK → channels.id, not null | Dono do vídeo é o canal (clarificação AMB-3) |
 | title | varchar(100) | not null | Inicialmente derivado do nome do arquivo sem extensão, truncado a 100 caracteres (AMB-3) |
 | description | text | nullable | Preenchida na Fase 04 |
@@ -489,11 +489,11 @@ Tabela `videos` (entidade `Video`, módulo `VideosModule`).
 | failure_reason | text | nullable | Motivo persistido quando `status = 'failed'` (AMB-4) |
 | original_filename | varchar(255) | not null | Nome enviado pelo cliente; usado no `Content-Disposition` do download (AMB-1) |
 | mime_type | varchar(100) | not null | Declarado no início do upload |
-| size_bytes | bigint | not null | Declarado no início; confirmado por `HeadObject.ContentLength` na conclusão *(per phase-03-upload-processing/TD-06)* |
+| size_bytes | bigint | not null | Declarado no início; confirmado por `HeadObject.ContentLength` na conclusão *(per phase-03-videos/TD-06)* |
 | original_key | varchar(512) | not null | Chave do arquivo original no bucket (`videos/{public_id}/original`) |
-| upload_id | varchar(1024) | nullable | `UploadId` do multipart; limpo após o complete *(per phase-03-upload-processing/TD-01)* |
-| playback_key | varchar(512) | nullable | MP4 H.264/AAC com `+faststart` (`videos/{public_id}/playback.mp4`) *(per phase-03-upload-processing/TD-08)* |
-| thumbnail_key | varchar(512) | nullable | Chave imprevisível e imutável sob `thumbnails/` *(per phase-03-upload-processing/TD-11)* |
+| upload_id | varchar(1024) | nullable | `UploadId` do multipart; limpo após o complete *(per phase-03-videos/TD-01)* |
+| playback_key | varchar(512) | nullable | MP4 H.264/AAC com `+faststart` (`videos/{public_id}/playback.mp4`) *(per phase-03-videos/TD-08)* |
+| thumbnail_key | varchar(512) | nullable | Chave imprevisível e imutável sob `thumbnails/` *(per phase-03-videos/TD-11)* |
 | duration_seconds | numeric(10,3) | nullable | Extraído via `ffprobe` (AMB-4) |
 | width | integer | nullable | AMB-4 |
 | height | integer | nullable | AMB-4 |
@@ -501,7 +501,7 @@ Tabela `videos` (entidade `Video`, módulo `VideosModule`).
 | audio_codec | varchar(50) | nullable | Codec do arquivo original; null quando não há faixa de áudio (AMB-4) |
 | upload_completed_at | timestamp | nullable | Momento do complete bem-sucedido |
 | processed_at | timestamp | nullable | Momento em que o processamento terminou (`ready` ou `failed`) |
-| created_at | timestamp | not null, auto-generated | `@CreateDateColumn`; base do prazo de rascunhos expirados *(per phase-03-upload-processing/TD-10)* |
+| created_at | timestamp | not null, auto-generated | `@CreateDateColumn`; base do prazo de rascunhos expirados *(per phase-03-videos/TD-10)* |
 | updated_at | timestamp | not null, auto-generated | `@UpdateDateColumn` |
 
 **Relations:** Video → Channel (many-to-one, owning side via `channel_id`); Channel → Video (one-to-many, lado inverso adicionado em `Channel`)
@@ -511,7 +511,7 @@ Tabela `videos` (entidade `Video`, módulo `VideosModule`).
 
 ### API Contracts
 
-Todas as rotas usam o `public_id` (TD-07) e exigem `Authorization: Bearer <access_token>` (guard JWT global herdado de phase-02-auth). Recurso de outro canal responde **404 `VIDEO_NOT_FOUND`**, nunca 403, para não revelar existência (AMB-1, AMB-2). Formato de erro herdado: `{ statusCode, error, message }` (phase-02-auth/TD-07). Os bytes de vídeo nunca trafegam pela API: o cliente envia as partes direto ao storage via URL pré-assinada *(per phase-03-upload-processing/TD-01)*.
+Todas as rotas usam o `public_id` (TD-07) e exigem `Authorization: Bearer <access_token>` (guard JWT global herdado de phase-02-auth). Recurso de outro canal responde **404 `VIDEO_NOT_FOUND`**, nunca 403, para não revelar existência (AMB-1, AMB-2). Formato de erro herdado: `{ statusCode, error, message }` (phase-02-auth/TD-07). Os bytes de vídeo nunca trafegam pela API: o cliente envia as partes direto ao storage via URL pré-assinada *(per phase-03-videos/TD-01)*.
 
 #### POST /videos (SI-03.7)
 
@@ -580,7 +580,7 @@ Lista as partes já recebidas pelo storage (`ListParts`) para retomada após fal
 
 #### POST /videos/:publicId/upload/complete (SI-03.9)
 
-Conclui o multipart, valida o tamanho real e enfileira o processamento *(per phase-03-upload-processing/TD-06)*.
+Conclui o multipart, valida o tamanho real e enfileira o processamento *(per phase-03-videos/TD-06)*.
 
 **Request headers:**
 - Authorization: Bearer <access_token>
@@ -623,7 +623,7 @@ Detalhe do vídeo para o dono (acompanhar status do processamento).
 - height: integer | null
 - video_codec: string | null
 - audio_codec: string | null
-- thumbnail_url: string | null — URL pública estável `{STORAGE_PUBLIC_ENDPOINT}/{STORAGE_BUCKET}/{thumbnail_key}` *(per phase-03-upload-processing/TD-11)*
+- thumbnail_url: string | null — URL pública estável `{STORAGE_PUBLIC_ENDPOINT}/{STORAGE_BUCKET}/{thumbnail_key}` *(per phase-03-videos/TD-11)*
 - created_at: string (ISO-8601)
 - processed_at: string (ISO-8601) | null
 
@@ -634,7 +634,7 @@ Detalhe do vídeo para o dono (acompanhar status do processamento).
 
 #### GET /videos/:publicId/stream (SI-03.12)
 
-Emite URL pré-assinada de `GetObject` do artefato de reprodução; o navegador faz Range requests direto ao storage *(per phase-03-upload-processing/TD-09, TD-08)*.
+Emite URL pré-assinada de `GetObject` do artefato de reprodução; o navegador faz Range requests direto ao storage *(per phase-03-videos/TD-09, TD-08)*.
 
 **Request headers:**
 - Authorization: Bearer <access_token>
@@ -652,7 +652,7 @@ Emite URL pré-assinada de `GetObject` do artefato de reprodução; o navegador 
 
 #### GET /videos/:publicId/download (SI-03.12)
 
-Emite URL pré-assinada do **arquivo original** com `ResponseContentDisposition=attachment` (AMB-1) *(per phase-03-upload-processing/TD-09)*.
+Emite URL pré-assinada do **arquivo original** com `ResponseContentDisposition=attachment` (AMB-1) *(per phase-03-videos/TD-09)*.
 
 **Request headers:**
 - Authorization: Bearer <access_token>
@@ -689,7 +689,7 @@ Emite URL pré-assinada do **arquivo original** com `ResponseContentDisposition=
 | GET /videos/:publicId | | ✗ (404) | ✓ | |
 | GET /videos/:publicId/stream | | ✗ (404) | ✓ | Público/anônimo só a partir das Fases 04/05 (AMB-2) |
 | GET /videos/:publicId/download | | ✗ (404) | ✓ | Público/anônimo só a partir da Fase 05 (AMB-1) |
-| Objeto `thumbnails/*` no storage | ✓ | ✓ | ✓ | Leitura anônima só por chave exata; prefixo não listável *(per phase-03-upload-processing/TD-11)* |
+| Objeto `thumbnails/*` no storage | ✓ | ✓ | ✓ | Leitura anônima só por chave exata; prefixo não listável *(per phase-03-videos/TD-11)* |
 
 ---
 
@@ -720,11 +720,11 @@ Falhas de processamento **não** geram resposta HTTP: o worker persiste `status 
 { "videoId": "uuid" }
 ```
 
-**Producer:** `VideosService.completeUpload` na API, após `CompleteMultipartUpload` + `HeadObject` + transição para `'processing'`, com `jobId = videoId` para idempotência de complete repetido (per `phase-03-upload-processing/TD-03`, `phase-03-upload-processing/TD-06`)
-**Consumer:** `VideoProcessingConsumer` (`@Processor('video-processing')`, `WorkerHost`) registrado **somente** no `WorkerModule` do container `video-worker` (per `phase-03-upload-processing/TD-04`)
+**Producer:** `VideosService.completeUpload` na API, após `CompleteMultipartUpload` + `HeadObject` + transição para `'processing'`, com `jobId = videoId` para idempotência de complete repetido (per `phase-03-videos/TD-03`, `phase-03-videos/TD-06`)
+**Consumer:** `VideoProcessingConsumer` (`@Processor('video-processing')`, `WorkerHost`) registrado **somente** no `WorkerModule` do container `video-worker` (per `phase-03-videos/TD-04`)
 **Trigger:** upload concluído e validado pelo endpoint de conclusão
-**Processing:** baixa o original para diretório temporário → `ffprobe` JSON (duração, dimensões, codecs) → normaliza para MP4 H.264/AAC com `-movflags +faststart` (remux quando os codecs já são compatíveis, transcodificação caso contrário) → extrai um frame como JPEG → envia `playback.mp4` e a thumbnail (`thumbnails/{random}.jpg`, `Cache-Control: public, max-age=31536000, immutable`) → persiste metadados, chaves, `processed_at` e `status = 'ready'` → remove temporários (per `phase-03-upload-processing/TD-05`, `phase-03-upload-processing/TD-08`, `phase-03-upload-processing/TD-11`)
-**Delivery semantics:** at-least-once; `attempts: 3` com `backoff: { type: 'exponential', delay: 5000 }`; mídia inválida lança `UnrecoverableError` (sem retry) e persiste `failed`/`INVALID_MEDIA`; esgotar tentativas persiste `failed`/`PROCESSING_ERROR` via `@OnWorkerEvent('failed')`; o consumer é idempotente (sobrescreve as mesmas chaves e ignora vídeos já `ready`) (per `phase-03-upload-processing/TD-03`)
+**Processing:** baixa o original para diretório temporário → `ffprobe` JSON (duração, dimensões, codecs) → normaliza para MP4 H.264/AAC com `-movflags +faststart` (remux quando os codecs já são compatíveis, transcodificação caso contrário) → extrai um frame como JPEG → envia `playback.mp4` e a thumbnail (`thumbnails/{random}.jpg`, `Cache-Control: public, max-age=31536000, immutable`) → persiste metadados, chaves, `processed_at` e `status = 'ready'` → remove temporários (per `phase-03-videos/TD-05`, `phase-03-videos/TD-08`, `phase-03-videos/TD-11`)
+**Delivery semantics:** at-least-once; `attempts: 3` com `backoff: { type: 'exponential', delay: 5000 }`; mídia inválida lança `UnrecoverableError` (sem retry) e persiste `failed`/`INVALID_MEDIA`; esgotar tentativas persiste `failed`/`PROCESSING_ERROR` via `@OnWorkerEvent('failed')`; o consumer é idempotente (sobrescreve as mesmas chaves e ignora vídeos já `ready`) (per `phase-03-videos/TD-03`)
 
 #### video-maintenance → job `expire-drafts`
 
@@ -734,10 +734,10 @@ Falhas de processamento **não** geram resposta HTTP: o worker persiste `status 
 {}
 ```
 
-**Producer:** job scheduler `expire-drafts` criado com `queue.upsertJobScheduler('expire-drafts', { every: <ms> }, { name: 'expire-drafts' })` no bootstrap do worker (per `phase-03-upload-processing/TD-10`)
-**Consumer:** `VideoMaintenanceConsumer` (`@Processor('video-maintenance')`) no `WorkerModule` (per `phase-03-upload-processing/TD-04`)
+**Producer:** job scheduler `expire-drafts` criado com `queue.upsertJobScheduler('expire-drafts', { every: <ms> }, { name: 'expire-drafts' })` no bootstrap do worker (per `phase-03-videos/TD-10`)
+**Consumer:** `VideoMaintenanceConsumer` (`@Processor('video-maintenance')`) no `WorkerModule` (per `phase-03-videos/TD-04`)
 **Trigger:** periódico (padrão a cada 1 hora)
-**Processing:** busca vídeos com `status = 'uploading'` e `created_at < now - VIDEO_DRAFT_TTL_HOURS`, chama `AbortMultipartUpload` (ignorando `NoSuchUpload`) e remove o registro; o lifecycle `AbortIncompleteMultipartUpload` do bucket (`VIDEO_MULTIPART_ABORT_DAYS`) cobre partes órfãs sem registro (per `phase-03-upload-processing/TD-10`)
+**Processing:** busca vídeos com `status = 'uploading'` e `created_at < now - VIDEO_DRAFT_TTL_HOURS`, chama `AbortMultipartUpload` (ignorando `NoSuchUpload`) e remove o registro; o lifecycle `AbortIncompleteMultipartUpload` do bucket (`VIDEO_MULTIPART_ABORT_DAYS`) cobre partes órfãs sem registro (per `phase-03-videos/TD-10`)
 **Delivery semantics:** at-least-once; idempotente (reexecução não encontra os rascunhos já removidos)
 
 ---
