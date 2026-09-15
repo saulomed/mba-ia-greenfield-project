@@ -31,12 +31,27 @@ docker compose exec nestjs-api npm install
 docker compose exec nestjs-api npm run start:dev
 ```
 
-**Known issue — UID mismatch on bind mount:** the `nestjs-api` container runs as `node` (uid 1000). If the host user's uid differs (check with `id -u` on the host), files bind-mounted from `.` are owned by the host uid, and `node` gets `EACCES` on `npm install` and on `nest start --watch` (which needs to create `dist/`). Workaround: run the first-time setup as root, which does not touch host file ownership:
+**Known issue — UID mismatch on bind mount:** both `nestjs-api` and `video-worker` run as `node` (uid 1000) — see `Dockerfile.dev`'s `USER node`. Both bind-mount the same host directory (`.:/home/node/app`). If the host user's uid differs from 1000 (check with `id -u` on the host), the top-level project directory is owned by the host uid/gid, and `node` has no write access to it — not because of individual file ownership, but because creating or removing an entry (a file or a directory) requires **write permission on the parent directory**, and `node`'s uid is in neither the owning user nor the owning group. This surfaces as `EACCES` on `npm install` (can't create `node_modules/`) and on `nest start --watch` for either service (can't create/rmdir `dist/` on every rebuild — this repeats on **every** watch-mode recompile, not just the first run, so per-command `-u root` workarounds have to be reapplied constantly).
+
+**Permanent fix (apply once per host clone/checkout):** grant the `node` uid write access to the project root via a POSIX ACL, without changing the ownership of any file. This is scoped to uid 1000 specifically (unlike `chmod o+w`, which would open write access to every other user on the host) and is inherited by future top-level entries via a default ACL:
+
+```bash
+# Run on the HOST, from nestjs-project/ (needs the acl package: apt/dnf/brew install acl)
+setfacl -m u:1000:rwx .
+setfacl -d -m u:1000:rwx .
+
+# Verify:
+getfacl -p .   # expect "user:1000:rwx" and "default:user:1000:rwx"
+```
+
+After this, `docker compose exec nestjs-api ...` and `docker compose exec video-worker` (or `docker compose restart video-worker`) work as the regular `node` user — no `-u root` needed, and `nest start --watch` survives repeated rebuilds. Re-run the two `setfacl` commands only if the project is re-cloned into a new directory (ACLs don't travel with `git clone`/`cp`).
+
+**Fallback (host has no `setfacl`, or the ACL hasn't been applied yet):** the old escape hatch still works for one-off recovery, but does not survive the next `nest --watch` rebuild:
 
 ```bash
 docker compose exec -u root nestjs-api npm install
-docker compose exec -u root nestjs-api chown -R node:node node_modules package-lock.json
-docker compose exec -u root nestjs-api npm run start:dev   # if start:dev also hits EACCES on dist/
+docker compose exec -u root nestjs-api chown -R node:node node_modules package-lock.json dist
+docker compose exec -u root nestjs-api npm run start:dev   # or: docker compose exec -u root video-worker npm run start:worker:dev
 ```
 
 **First-time `.env` setup:** the repo ships only `.env.example`; copy it before first run:
