@@ -1,19 +1,19 @@
 ---
 libs:
   "@aws-sdk/client-s3":
-    version: "^3.x (não instalado — fixar na implementação)"
+    version: "^3.1131.0"
     context7_id: "/aws/aws-sdk-js-v3"
     fetched_at: "2026-09-13T16:17:46Z"
   "@aws-sdk/s3-request-presigner":
-    version: "^3.x (não instalado — mesma minor de @aws-sdk/client-s3)"
+    version: "^3.1131.0"
     context7_id: "/aws/aws-sdk-js-v3"
     fetched_at: "2026-09-13T16:17:46Z"
   "@nestjs/bullmq":
-    version: "^11.x (não instalado — compatível com @nestjs/core ^11.0.1)"
+    version: "^11.0.5"
     context7_id: "/nestjs/docs.nestjs.com"
     fetched_at: "2026-09-13T16:17:46Z"
   "bullmq":
-    version: "^5.x (não instalado — peer de @nestjs/bullmq)"
+    version: "^5.81.5"
     context7_id: "/taskforcesh/bullmq"
     fetched_at: "2026-09-13T16:17:46Z"
 sources_mtime:
@@ -22,7 +22,7 @@ sources_mtime:
 
 # Library References — Fase 03 (Upload e Processamento)
 
-Cache de documentação (Context7) das bibliotecas decididas em `phase-03-videos`. Excertos focados nos usos definidos pelas TDs. Nenhuma das bibliotecas está instalada em `nestjs-project/package.json` ainda: as versões são faixas compatíveis com o stack atual (NestJS 11) e devem ser fixadas no momento da instalação.
+Cache de documentação (Context7) das bibliotecas decididas em `phase-03-videos`. Excertos focados nos usos definidos pelas TDs. As versões foram fixadas na instalação (SI-03.1) e refletem `nestjs-project/package.json`; os excertos foram obtidos antes da instalação, com faixas compatíveis com o stack (NestJS 11).
 
 ## @aws-sdk/client-s3
 
@@ -57,6 +57,8 @@ Import modular: importe `S3Client` e cada `*Command` individualmente e envie com
 ### Lifecycle de multipart incompleto (TD-10)
 
 `PutBucketLifecycleConfigurationCommand` com uma regra `AbortIncompleteMultipartUpload: { DaysAfterInitiation: N }`: o storage remove as partes de uploads não concluídos após N dias.
+
+> Nota de implementação (15/09/2026, Context7 `/minio/docs`, S3 API Compatibility): o MinIO não suporta a ação `AbortIncompleteMultipartUpload` em `PutBucketLifecycle`. No ambiente local a regra é rejeitada (aviso no bootstrap) e a limpeza de partes órfãs fica com `MINIO_API_STALE_UPLOADS_EXPIRY`; a regra vale no S3.
 
 ### Política de leitura por prefixo (TD-11)
 
