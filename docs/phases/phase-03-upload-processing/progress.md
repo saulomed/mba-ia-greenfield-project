@@ -1,7 +1,7 @@
 # phase-03-upload-processing — Progress
 
-**Status:** in_progress
-**SIs:** 13/14 completed
+**Status:** completed
+**SIs:** 14/14 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços de Storage, Fila e Worker
 - **Status:** completed
@@ -145,6 +145,10 @@
   - Revisão `/simplify` (reuso, simplificação, eficiência, altitude) aplicada: (1) Reuse e Simplification convergiram, independentemente, num mesmo achado — o teste de integração gerava `public_id` inline via `randomUUID().replace(...)` em vez de reaproveitar `generatePublicId()` (já usado em produção); trocado nos dois helpers do spec; (2) Simplification: extraído o bloco duplicado de "voltar `created_at` no tempo" para um helper `backdate(id, ageHours)`, reaproveitado pelos dois helpers de fixture do spec; (3) Simplification: `process()` trocou `while` com chamada duplicada de `findExpiredBatch` (antes do loop e no fim do corpo) por um único `do...while`; (4) Efficiency: paralelizado via `Promise.all` o processamento dos itens de cada lote em `expireDraft` (I/O de storage+banco por vídeo é independente entre vídeos; o `try/catch` por item já garante que uma falha isolada não derruba o `Promise.all`). Achados descartados conscientemente: Altitude sugeriu mover o intervalo de 1h do scheduler (`EXPIRE_DRAFTS_INTERVAL_MS`) para uma env var em `video.config.ts`, já que os demais parâmetros do domínio (`draftTtlHours`, `multipartAbortDays`) seguem esse padrão; pulado por contradizer a ação técnica literal do plano, que especifica `{ every: 3600000 }` como valor fixo no `upsertJobScheduler`; Efficiency também sugeriu substituir os deletes individuais por um único `DELETE ... WHERE id IN (...)` por lote após separar os abortos bem-sucedidos dos falhos; pulado por exigir reestruturar o fluxo "por item, log-and-continue" descrito literalmente no plano em duas fases (abortar todos, depois deletar em lote), acrescentando complexidade de rastreamento de sucesso/falha para um ganho marginal num job que roda 1x/hora sobre lotes de no máximo 100 linhas.
 
 ### SI-03.14 — Regenerar o Artefato OpenAPI com os Endpoints de Vídeo
-- **Status:** pending
-- **Tests:** —
-- **Observations:** none
+- **Status:** completed
+- **Tests:** `src/openapi-export.integration-spec.ts` ampliado com 2 casos novos (`includes all 7 video endpoints`; a asserção de 401 pré-existente foi generalizada para `every 4xx response in the document references ApiErrorEnvelope`, ver Observations); suíte completa 43 suites/259 testes, e2e 8 suites/86 testes (`--runInBand`), `tsc --noEmit` limpo, `lint` limpo no arquivo modificado
+- **Observations:**
+  - `openapi.json` regenerado dentro do container (`ts-node -r tsconfig-paths/register src/openapi-export.ts`, rodado como root por causa do mismatch de UID do bind mount — arquivo `chown`ado de volta para o usuário do host em seguida); diff contém só a adição dos 7 paths de vídeo, nada em `/auth` ou `/users` mudou.
+  - Conferido manualmente (script Python fora do repo) que os 7 endpoints de vídeo e todos os status 4xx do documento inteiro já referenciam `#/components/schemas/ApiErrorEnvelope` — nenhum decorador `@ApiResponse` em `videos.controller.ts` precisou de ajuste (já estavam corretos desde as SIs 03.7–03.12).
+  - Critério de aceite "rodar a exportação novamente sem mudanças de código não gera diff" verificado explicitamente: segunda execução produziu bytes idênticos ao `openapi.json` já commitado.
+  - Revisão `/simplify` (4 agentes) convergiu num único achado real: Reuse, Simplification e Altitude, cada um por um ângulo diferente, apontaram que o teste novo `every video operation 4xx response references ApiErrorEnvelope` (filtrado a `/videos`) duplicava o mecanismo do teste pré-existente `has at least one path with a 401 response referencing ApiErrorEnvelope` (filtrado a 401 apenas). Fix aplicado: generalizei o teste pré-existente para `every 4xx response in the document references ApiErrorEnvelope` (sem filtro de prefixo, cobrindo todo o documento, não só `/videos`), usando a forma achatada com `flatMap`/`filter` sugerida por Simplification em vez de 3 `for` aninhados; o teste novo específico de `/videos` foi removido por ficar redundante — a asserção geral já cobre os endpoints de vídeo e qualquer controller futuro, sem precisar copiar o mesmo scaffold por SI de controller. Efficiency não encontrou achados (o custo caro, subir a `AppModule`, já é amortizado no `beforeAll` compartilhado). Mantido sem alteração o teste `includes all 7 video endpoints` (Altitude: smoke test de regressão propositalmente concreto, no mesmo padrão já usado pelo teste de paths de auth protegidos).
